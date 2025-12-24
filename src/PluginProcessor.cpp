@@ -10,7 +10,42 @@ AudioPluginAudioProcessor::AudioPluginAudioProcessor()
                       #endif
                        .withOutput ("Output", juce::AudioChannelSet::stereo(), true)
                      #endif
-                       )
+                       ),
+        parameters (*this, nullptr, juce::Identifier ("DEP"), 
+        {
+            std::make_unique<juce::AudioParameterFloat>
+            (
+                LFO_FREQ_ID,
+                LFO_FREQ_NAME,
+                0.01f,
+                20.f,
+                0.4f
+            ),
+            std::make_unique<juce::AudioParameterFloat>
+            (
+                LFO_OFFSET_ID,
+                LFO_OFFSET_NAME,
+                0.f,
+                1.f,
+                1.f
+            ),
+            std::make_unique<juce::AudioParameterFloat>
+            (
+                DELAY_TIME_ID,
+                DELAY_TIME_NAME,
+                0.f,
+                1.f,
+                0.02f
+            ),
+            std::make_unique<juce::AudioParameterFloat>
+            (
+                LFO_DEPTH_ID,
+                LFO_DEPTH_NAME,
+                0.f,
+                1.f,
+                0.5f
+            )
+        })
 {
 }
 
@@ -161,9 +196,7 @@ void AudioPluginAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer,
 
         fillDelayBuffer (channel, buffer);
         readFromDelayBufferByFrame (channel, buffer);
-
-        //for (int sample = 0; sample < buffer.getNumSamples(); ++sample)
-        //    channelData[sample] = getSineWaveData (channel);
+        fillDelayBuffer (channel, buffer);
         
         while (currentAngle[static_cast<long unsigned int> (channel)] > 2.0 * juce::MathConstants<double>::pi)
             currentAngle[static_cast<long unsigned int> (channel)] -= 2.0 * juce::MathConstants<double>::pi;
@@ -234,6 +267,8 @@ void AudioPluginAudioProcessor::readFromDelayBufferByFrame (int channel, juce::A
     auto delayBufferSize = delayBuffer.getNumSamples();
     auto* bufferData = buffer.getWritePointer (channel);
     auto* delayBufferData = delayBuffer.getReadPointer (channel);
+    auto delayTime = parameters.getRawParameterValue (DELAY_TIME_ID)->load();
+    auto lfoDepth = parameters.getRawParameterValue (LFO_DEPTH_ID)->load();
     float g { 0.7f };
     
     // length of audio from in the past
@@ -241,7 +276,7 @@ void AudioPluginAudioProcessor::readFromDelayBufferByFrame (int channel, juce::A
 
     for (int sample = 0; sample < bufferSize; ++sample)
     {
-        auto currentPosition = delayPosition + (getSineWaveData (channel) * getSampleRate() * 0.015);
+        auto currentPosition = delayPosition + (getSineWaveData (channel) * getSampleRate() * delayTime * lfoDepth);
         if (currentPosition < 0)
             currentPosition += static_cast<double>(delayBufferSize);
         int readPosition { static_cast<int>(currentPosition) };
@@ -259,13 +294,21 @@ void AudioPluginAudioProcessor::readFromDelayBufferByFrame (int channel, juce::A
 
 void AudioPluginAudioProcessor::updateAngleDelta()
 {
+    auto frequency = parameters.getRawParameterValue(LFO_FREQ_ID)->load();
     auto cyclesPerSample = frequency / currentSampleRate; // [2]
     angleDelta = cyclesPerSample * 2.0 * juce::MathConstants<double>::pi;
 }
 
 float AudioPluginAudioProcessor::getSineWaveData (int channel)
 {
-    auto currentSample = static_cast<float> (std::sin(currentAngle[static_cast<long unsigned int>(channel)]));
+    auto lfoOffset = parameters.getRawParameterValue (LFO_OFFSET_ID)->load();
+    float currentSample;
+
+    if (channel % 2 == 1)
+        currentSample = static_cast<float> (std::sin(currentAngle[static_cast<long unsigned int>(channel)] + (lfoOffset * juce::MathConstants<double>::pi)));
+    else
+        currentSample = static_cast<float> (std::sin(currentAngle[static_cast<long unsigned int>(channel)]));
+    
     currentAngle[static_cast<long unsigned int>(channel)] += angleDelta;
     return currentSample;
 }

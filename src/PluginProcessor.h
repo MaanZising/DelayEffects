@@ -3,6 +3,18 @@
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <vector>
 
+#define LFO_FREQ_ID "lfo_freq"
+#define LFO_FREQ_NAME "LFO Frequency"
+
+#define LFO_OFFSET_ID "lfo_offset"
+#define LFO_OFFSET_NAME "LFO Offset"
+
+#define DELAY_TIME_ID "delay_time"
+#define DELAY_TIME_NAME "Delay Time"
+
+#define LFO_DEPTH_ID "lfo_depth"
+#define LFO_DEPTH_NAME "LFO Depth"
+
 //==============================================================================
 class AudioPluginAudioProcessor final : public juce::AudioProcessor
 {
@@ -42,18 +54,21 @@ public:
     //==============================================================================
     void getStateInformation (juce::MemoryBlock& destData) override;
     void setStateInformation (const void* data, int sizeInBytes) override;
+    
+    //==============================================================================
+    juce::AudioProcessorValueTreeState parameters;
 
 private:
     int writePosition { 0 };
     void updateWritePosition (juce::AudioBuffer<float>& buffer);
 
     juce::AudioBuffer<float> delayBuffer;
-    double delayTime { 0.02 };
+    //double delayTime { 0.02 };
     void fillDelayBuffer (int channel, juce::AudioBuffer<float>& buffer);
     void readFromDelayBufferByBlock (int channel, juce::AudioBuffer<float>& buffer);
     void readFromDelayBufferByFrame (int channel, juce::AudioBuffer<float>& buffer);
 
-    double frequency { 0.4 };
+    //double frequency {0.4};
     double currentSampleRate { 0.0 };
     std::vector<double> currentAngle;
     double angleDelta { 0.0 };
