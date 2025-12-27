@@ -2,6 +2,7 @@
 
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <vector>
+#include "Delay.h"
 
 #define LFO_FREQ_ID "lfo_freq"
 #define LFO_FREQ_NAME "LFO Frequency"
@@ -59,6 +60,8 @@ public:
     juce::AudioProcessorValueTreeState parameters;
 
 private:
+    Delay delay;
+
     int writePosition { 0 };
     void updateWritePosition (juce::AudioBuffer<float>& buffer);
 
