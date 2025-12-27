@@ -12,6 +12,7 @@ class Delay
 {
 public:
     void init (double& sampleRateRef, int& writePositionRef, juce::AudioProcessorValueTreeState& parametersRef, juce::AudioBuffer<float>& delayBufferRef);
+    void readFromDelayBufferByBlock (int channel, juce::AudioBuffer<float>& buffer); // not used
     void readFromDelayBuffer (int channel, juce::AudioBuffer<float>& buffer);
 private:
     double sampleRate;

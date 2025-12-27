@@ -18,17 +18,15 @@ AudioPluginAudioProcessor::AudioPluginAudioProcessor()
             (
                 DELAY_DELAY_TIME_ID,
                 DELAY_DELAY_TIME_NAME,
-                0.001f,
-                2.f,
+                juce::NormalisableRange<float> (0.001f, 2.000f, 0.001f, 0.4f),
                 1.f
             ),
             std::make_unique<juce::AudioParameterFloat>
             (
                 DELAY_FEEDBACK_ID,
                 DELAY_FEEDBACK_NAME,
-                0.f,
-                1.f,
-                0.7f
+                juce::NormalisableRange<float> (0.000f, 1.000f, 0.001f),
+                0.5f
             ),
             //////////////////////////////////////////////// flanger
             std::make_unique<juce::AudioParameterFloat>
@@ -140,7 +138,7 @@ void AudioPluginAudioProcessor::changeProgramName (int index, const juce::String
 void AudioPluginAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
 {
     // initialize delay buffer
-    int delayBufferSize { static_cast<int>(sampleRate * 2.0) };
+    int delayBufferSize { static_cast<int>(sampleRate * 2.01) };
     delayBuffer.setSize (getTotalNumInputChannels(), delayBufferSize);
     for (auto channel = 0; channel < getTotalNumOutputChannels(); ++channel)
         delayBuffer.clear (channel, 0, delayBuffer.getNumSamples());
@@ -209,12 +207,12 @@ void AudioPluginAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer,
             channelData[sample] = inputData[sample];
 
         fillDelayBuffer (channel, buffer);
-        //delay.readFromDelayBuffer (channel, buffer);
-        flanger.readFromDelayBuffer (channel, buffer);
-        //fillDelayBuffer (channel, buffer);
+        delay.readFromDelayBuffer (channel, buffer);
+        //flanger.readFromDelayBuffer (channel, buffer);
+        fillDelayBuffer (channel, buffer);
     }
 
-    // determine where to write the next block data to the delay buffer
+    // determine where to write the next block of data to the delay buffer
     updateWritePosition (buffer);
 }
 
