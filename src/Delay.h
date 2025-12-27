@@ -5,11 +5,14 @@
 #define DELAY_DELAY_TIME_ID "delay_delay_time"
 #define DELAY_DELAY_TIME_NAME "Delay Delay Time"
 
+#define DELAY_FEEDBACK_ID "delay_feedback"
+#define DELAY_FEEDBACK_NAME "Delay Feedback"
+
 class Delay
 {
 public:
     void init (double& sampleRateRef, int& writePositionRef, juce::AudioProcessorValueTreeState& parametersRef, juce::AudioBuffer<float>& delayBufferRef);
-    void readFromDelayBufferByBlock (int channel, juce::AudioBuffer<float>& buffer);
+    void readFromDelayBuffer (int channel, juce::AudioBuffer<float>& buffer);
 private:
     double sampleRate;
     int* writePosition;

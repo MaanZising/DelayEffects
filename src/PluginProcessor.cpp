@@ -13,42 +13,52 @@ AudioPluginAudioProcessor::AudioPluginAudioProcessor()
                        ),
         parameters (*this, nullptr, juce::Identifier ("DEP"), 
         {
+            //////////////////////////////////////////////// delay
             std::make_unique<juce::AudioParameterFloat>
             (
                 DELAY_DELAY_TIME_ID,
                 DELAY_DELAY_TIME_NAME,
-                0.01f,
+                0.001f,
                 2.f,
                 1.f
             ),
             std::make_unique<juce::AudioParameterFloat>
             (
-                LFO_FREQ_ID,
-                LFO_FREQ_NAME,
+                DELAY_FEEDBACK_ID,
+                DELAY_FEEDBACK_NAME,
+                0.f,
+                1.f,
+                0.7f
+            ),
+            //////////////////////////////////////////////// flanger
+            std::make_unique<juce::AudioParameterFloat>
+            (
+                FLANGER_LFO_FREQ_ID,
+                FLANGER_LFO_FREQ_NAME,
                 0.01f,
                 20.f,
                 0.4f
             ),
             std::make_unique<juce::AudioParameterFloat>
             (
-                LFO_OFFSET_ID,
-                LFO_OFFSET_NAME,
+                FLANGER_LFO_OFFSET_ID,
+                FLANGER_LFO_OFFSET_NAME,
                 0.f,
                 1.f,
                 1.f
             ),
             std::make_unique<juce::AudioParameterFloat>
             (
-                DELAY_TIME_ID,
-                DELAY_TIME_NAME,
+                FLANGER_DELAY_TIME_ID,
+                FLANGER_DELAY_TIME_NAME,
                 0.f,
                 1.f,
                 0.02f
             ),
             std::make_unique<juce::AudioParameterFloat>
             (
-                LFO_DEPTH_ID,
-                LFO_DEPTH_NAME,
+                FLANGER_LFO_DEPTH_ID,
+                FLANGER_LFO_DEPTH_NAME,
                 0.f,
                 1.f,
                 0.5f
@@ -129,20 +139,22 @@ void AudioPluginAudioProcessor::changeProgramName (int index, const juce::String
 //==============================================================================
 void AudioPluginAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
 {
-    delay.init (sampleRate, writePosition, parameters, delayBuffer);
-
+    // initialize delay buffer
     int delayBufferSize { static_cast<int>(sampleRate * 2.0) };
     delayBuffer.setSize (getTotalNumInputChannels(), delayBufferSize);
     for (auto channel = 0; channel < getTotalNumOutputChannels(); ++channel)
         delayBuffer.clear (channel, 0, delayBuffer.getNumSamples());
-
-    currentSampleRate = sampleRate;
-    updateAngleDelta();
-
+    
+    // initialize effects
+    delay.init (sampleRate, writePosition, parameters, delayBuffer);
+    flanger.init (sampleRate, writePosition, parameters, delayBuffer);
+    
+    // initialize flanger
+    flanger.updateAngleDelta();
     for (auto channel = 0; channel < getTotalNumOutputChannels(); ++channel)
-        currentAngle.push_back (0.);
+        flanger.currentAngle.push_back (0.);
 
-    juce::ignoreUnused (sampleRate, samplesPerBlock);
+    juce::ignoreUnused (samplesPerBlock);
 }
 
 void AudioPluginAudioProcessor::releaseResources()
@@ -192,22 +204,14 @@ void AudioPluginAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer,
         const auto* inputData = buffer.getReadPointer (channel);
         auto* channelData = buffer.getWritePointer (channel);
 
+        // get input signal
         for (int sample = 0; sample < buffer.getNumSamples(); ++sample)
             channelData[sample] = inputData[sample];
 
-        #if 0
-        // copy input signal to delay buffer
         fillDelayBuffer (channel, buffer);
-        // read from the past in the delay buffer, then add back to main buffer
-        readFromDelayBufferByBlock (channel, buffer);
-        // copy signal from main buffer to delay buffer, creating feedback loop
-        fillDelayBuffer(channel, buffer);
-        #endif
-
-        fillDelayBuffer (channel, buffer);
-        //readFromDelayBufferByFrame (channel, buffer);
-        delay.readFromDelayBufferByBlock (channel, buffer);
-        fillDelayBuffer (channel, buffer);
+        //delay.readFromDelayBuffer (channel, buffer);
+        flanger.readFromDelayBuffer (channel, buffer);
+        //fillDelayBuffer (channel, buffer);
     }
 
     // determine where to write the next block data to the delay buffer
@@ -242,87 +246,6 @@ void AudioPluginAudioProcessor::fillDelayBuffer(int channel, juce::AudioBuffer<f
         auto numSamplesAtStart = bufferSize - numSamplesToEnd;
         delayBuffer.copyFrom (channel, 0, buffer.getWritePointer (channel, numSamplesToEnd), numSamplesAtStart);
     }
-}
-
-void AudioPluginAudioProcessor::readFromDelayBufferByBlock (int channel, juce::AudioBuffer<float>& buffer)
-{
-    auto bufferSize = buffer.getNumSamples();
-    auto delayBufferSize = delayBuffer.getNumSamples();
-
-    // length of audio from in the past
-    //auto readPosition = writePosition - (getSampleRate() * delayTime);
-    auto readPosition = writePosition - getSampleRate();
-    if (readPosition < 0)
-        readPosition += delayBufferSize;
-
-    float g = 0.7f;
-    if (readPosition + bufferSize < delayBufferSize)
-    {
-        buffer.addFromWithRamp (channel, 0, delayBuffer.getReadPointer (channel, readPosition), bufferSize, g, g);
-    }
-    else
-    {           
-        auto numSamplesToEnd = delayBufferSize - readPosition;
-        buffer.addFromWithRamp (channel, 0, delayBuffer.getReadPointer (channel, readPosition), numSamplesToEnd, g, g);
-        auto numSamplesAtStart = bufferSize - numSamplesToEnd;
-        buffer.addFromWithRamp (channel, numSamplesToEnd, delayBuffer.getReadPointer (channel, 0), numSamplesAtStart, g, g);
-    }
-}
-
-void AudioPluginAudioProcessor::readFromDelayBufferByFrame (int channel, juce::AudioBuffer<float>& buffer)
-{
-    auto bufferSize = buffer.getNumSamples();
-    auto delayBufferSize = delayBuffer.getNumSamples();
-    auto* bufferData = buffer.getWritePointer (channel);
-    auto* delayBufferData = delayBuffer.getReadPointer (channel);
-    auto delayTime = parameters.getRawParameterValue (DELAY_TIME_ID)->load();
-    auto lfoDepth = parameters.getRawParameterValue (LFO_DEPTH_ID)->load();
-    float g { 0.7f };
-    
-    // length of audio from in the past
-    double delayPosition { writePosition - (getSampleRate() * delayTime) };
-
-    for (int sample = 0; sample < bufferSize; ++sample)
-    {
-        auto currentPosition = delayPosition + (getSineWaveData (channel) * getSampleRate() * delayTime * lfoDepth);
-        if (currentPosition < 0)
-            currentPosition += static_cast<double>(delayBufferSize);
-        int readPosition { static_cast<int>(currentPosition) };
-        double readPositionDelta { currentPosition - readPosition };
-
-        // linear interpolation
-        int previousPosition { (sample + readPosition) % delayBufferSize };
-        int nextPosition { (previousPosition + 1) % delayBufferSize };
-        // auto currentData = (delayBufferData[nextPosition] * readPositionDelta) + (delayBufferData[previousPosition] * (1 - readPositionDelta));
-        auto currentData = (delayBufferData[nextPosition] - delayBufferData[previousPosition]) * readPositionDelta + delayBufferData[previousPosition];
-
-        while (currentAngle[static_cast<long unsigned int> (channel)] > 2.0 * juce::MathConstants<double>::pi)
-            currentAngle[static_cast<long unsigned int> (channel)] -= 2.0 * juce::MathConstants<double>::pi;
-
-        bufferData[sample] += currentData * g;
-    }
-}
-
-void AudioPluginAudioProcessor::updateAngleDelta()
-{
-    auto frequency = parameters.getRawParameterValue(LFO_FREQ_ID)->load();
-    auto cyclesPerSample = frequency / currentSampleRate; // [2]
-    angleDelta = cyclesPerSample * 2.0 * juce::MathConstants<double>::pi;
-}
-
-float AudioPluginAudioProcessor::getSineWaveData (int channel)
-{
-    auto lfoOffset = parameters.getRawParameterValue (LFO_OFFSET_ID)->load();
-    float currentSample;
-
-    if (channel % 2 == 1)
-        currentSample = static_cast<float> (std::sin(currentAngle[static_cast<long unsigned int>(channel)] + (lfoOffset * juce::MathConstants<double>::pi)));
-    else
-        currentSample = static_cast<float> (std::sin(currentAngle[static_cast<long unsigned int>(channel)]));
-    
-    currentAngle[static_cast<long unsigned int>(channel)] += angleDelta;
-
-    return currentSample;
 }
 
 //==============================================================================
