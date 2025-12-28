@@ -7,7 +7,7 @@ DelayComponent::DelayComponent(AudioPluginAudioProcessor& p) : processorRef (p)
     
     delayTimeDialAttach = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (processorRef.parameters, DELAY_DELAY_TIME_ID, delayTimeDial);
     delayTimeDial.setSliderStyle (juce::Slider::SliderStyle::RotaryVerticalDrag);
-    delayTimeDial.setTextBoxStyle (juce::Slider::TextBoxBelow, true, 80, 20);
+    delayTimeDial.setTextBoxStyle (juce::Slider::TextBoxBelow, true, 100, 20);
     delayTimeDial.setTextBoxIsEditable (true);
     delayTimeDial.setTextValueSuffix (" secs");
     delayTimeDial.setLookAndFeel (&lkfDelay);
@@ -15,7 +15,7 @@ DelayComponent::DelayComponent(AudioPluginAudioProcessor& p) : processorRef (p)
 
     feedbackDialAttach = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (processorRef.parameters, DELAY_FEEDBACK_ID, feedbackDial);
     feedbackDial.setSliderStyle (juce::Slider::SliderStyle::RotaryVerticalDrag);
-    feedbackDial.setTextBoxStyle (juce::Slider::TextBoxBelow, true, 80, 20);
+    feedbackDial.setTextBoxStyle (juce::Slider::TextBoxBelow, true, 100, 20);
     feedbackDial.setTextBoxIsEditable (true);
     feedbackDial.setLookAndFeel (&lkfDelay);
     addAndMakeVisible (feedbackDial);

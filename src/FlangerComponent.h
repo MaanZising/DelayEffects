@@ -22,6 +22,9 @@ private:
     juce::Slider lfoFreqDial;
     juce::Slider lfoDepthDial;
     juce::Slider lfoOffsetDial;
+    juce::Slider feedbackDial;
+    
+    juce::ToggleButton feedbackToggle;
 
     const int fisrstColumnX { 20 };
     const int firstRowY { 40 };
@@ -35,4 +38,7 @@ public:
     std::unique_ptr <juce::AudioProcessorValueTreeState::SliderAttachment> lfoFreqDialAttach;
     std::unique_ptr <juce::AudioProcessorValueTreeState::SliderAttachment> lfoDepthDialAttach;
     std::unique_ptr <juce::AudioProcessorValueTreeState::SliderAttachment> lfoOffsetDialAttach;
+    std::unique_ptr <juce::AudioProcessorValueTreeState::SliderAttachment> feedbackDialAttach;
+
+    std::unique_ptr <juce::AudioProcessorValueTreeState::ButtonAttachment> feedbackToggleAttach;
 };

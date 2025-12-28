@@ -6,6 +6,12 @@
 #include "Delay.h"
 #include "Flanger.h"
 
+#define GAIN_ID "gain"
+#define GAIN_NAME "Gain"
+
+#define MIX_ID "mix"
+#define MIX_NAME "Mix"
+
 //==============================================================================
 class AudioPluginAudioProcessor final : public juce::AudioProcessor
 {
@@ -48,6 +54,7 @@ public:
     
     //==============================================================================
     juce::AudioProcessorValueTreeState parameters;
+    juce::UndoManager undoManager;
     bool clearBuffer { false };
 
 private:

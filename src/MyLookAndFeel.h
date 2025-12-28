@@ -29,6 +29,10 @@ public:
 
         setColour (juce::Label::textColourId, darkGrey);
         setColour (juce::Label::textWhenEditingColourId, darkGrey);
+
+        setColour (juce::ToggleButton::textColourId, darkGrey);
+        setColour (juce::ToggleButton::tickColourId, darkGrey);
+        setColour (juce::ToggleButton::tickDisabledColourId, darkGrey);
     }
 
     juce::Font getLabelFont(juce::Label&) override
@@ -59,5 +63,21 @@ public:
             g.setColour (lightGrey);
             g.drawFittedText (button.getButtonText(), button.getLocalBounds(), juce::Justification::centred, 1);
         }
+    }
+
+    void drawLinearSlider (juce::Graphics& g, int x, int y, int width, int height,
+                           float sliderPos, float minSliderPos, float maxSliderPos,
+                           const juce::Slider::SliderStyle style, juce::Slider& slider) override
+    {
+        // Custom thickness
+        const int thickness = 16; // adjust this value
+
+        juce::Rectangle<int> track (x + width/2 - thickness/2, y, thickness, height);
+
+        g.setColour (blue);
+        g.fillRect (track);
+
+        g.setColour (darkGrey);
+        g.fillRect (track.withBottom (static_cast<int>(sliderPos)));
     }
 };

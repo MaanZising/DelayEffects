@@ -11,7 +11,7 @@ AudioPluginAudioProcessor::AudioPluginAudioProcessor()
                        .withOutput ("Output", juce::AudioChannelSet::stereo(), true)
                      #endif
                        ),
-        parameters (*this, nullptr, juce::Identifier ("DEP"), 
+        parameters (*this, &undoManager, juce::Identifier ("DEP"), 
         {
             //////////////////////////////////////////////// current effect
             std::make_unique<juce::AudioParameterInt>
@@ -27,14 +27,14 @@ AudioPluginAudioProcessor::AudioPluginAudioProcessor()
             (
                 DELAY_DELAY_TIME_ID,
                 DELAY_DELAY_TIME_NAME,
-                juce::NormalisableRange<float> (0.001f, 2.000f, 0.001f, 0.4f),
+                juce::NormalisableRange<float> (0.001f, 2.000f, 0.0001f, 0.4f),
                 1.f
             ),
             std::make_unique<juce::AudioParameterFloat>
             (
                 DELAY_FEEDBACK_ID,
                 DELAY_FEEDBACK_NAME,
-                juce::NormalisableRange<float> (0.000f, 1.000f, 0.001f),
+                juce::NormalisableRange<float> (0.000f, 1.000f, 0.0001f),
                 0.5f
             ),
             //////////////////////////////////////////////// flanger
@@ -42,29 +42,57 @@ AudioPluginAudioProcessor::AudioPluginAudioProcessor()
             (
                 FLANGER_LFO_FREQ_ID,
                 FLANGER_LFO_FREQ_NAME,
-                juce::NormalisableRange<float> (0.01f, 20.00f, 0.01f, 0.4f),
-                0.4f
+                juce::NormalisableRange<float> (0.01f, 20.00f, 0.001f, 0.4f),
+                0.6f
             ),
             std::make_unique<juce::AudioParameterFloat>
             (
                 FLANGER_LFO_OFFSET_ID,
                 FLANGER_LFO_OFFSET_NAME,
-                juce::NormalisableRange<float> (0.f, 1.f, 0.001f),
+                juce::NormalisableRange<float> (0.f, 1.f, 0.0001f),
                 0.5f
             ),
             std::make_unique<juce::AudioParameterFloat>
             (
                 FLANGER_DELAY_TIME_ID,
                 FLANGER_DELAY_TIME_NAME,
-                juce::NormalisableRange<float> (0.000f, 1.000f, 0.001f, 0.4f),
-                0.020f
+                juce::NormalisableRange<float> (0.000f, 1.000f, 0.00001f, 0.3f),
+                0.005f
             ),
             std::make_unique<juce::AudioParameterFloat>
             (
                 FLANGER_LFO_DEPTH_ID,
                 FLANGER_LFO_DEPTH_NAME,
-                juce::NormalisableRange<float> (0.f, 1.f, 0.001f),
+                juce::NormalisableRange<float> (0.f, 1.f, 0.0001f),
                 0.5f
+            ),
+            std::make_unique<juce::AudioParameterFloat>
+            (
+                FLANGER_FEEDBACK_ID,
+                FLANGER_FEEDBACK_NAME,
+                juce::NormalisableRange<float> (0.000f, 1.000f, 0.0001f),
+                0.7f
+            ),
+            std::make_unique<juce::AudioParameterBool>
+            (
+                FLANGER_FEEDBACK_TOGGLE_ID,
+                FLANGER_FEEDBACK_TOGGLE_NAME,
+                false
+            ),
+            //////////////////////////////////////////////// master
+            std::make_unique<juce::AudioParameterFloat>
+            (
+                GAIN_ID,
+                GAIN_NAME,
+                juce::NormalisableRange<float> (0.f, 2.f, 0.0001f, 0.4f),
+                0.7f
+            ),
+            std::make_unique<juce::AudioParameterFloat>
+            (
+                MIX_ID,
+                MIX_NAME,
+                juce::NormalisableRange<float> (0.f, 1.f, 0.0001f),
+                1.f
             )
         })
 {
@@ -77,7 +105,7 @@ AudioPluginAudioProcessor::~AudioPluginAudioProcessor()
 //==============================================================================
 const juce::String AudioPluginAudioProcessor::getName() const
 {
-    return "Granular Synthesizer";
+    return "Delay Effects";
 }
 
 bool AudioPluginAudioProcessor::acceptsMidi() const
@@ -204,13 +232,18 @@ void AudioPluginAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer,
     
     for (int channel = 0; channel < totalNumInputChannels; ++channel)
     {
+        std::vector<float> input;
+
         const auto* inputData = buffer.getReadPointer (channel);
         auto* channelData = buffer.getWritePointer (channel);
         int tabIndex = static_cast<int> (parameters.getRawParameterValue("tab_index")->load());
 
         // get input signal
         for (int sample = 0; sample < buffer.getNumSamples(); ++sample)
+        {
             channelData[sample] = inputData[sample];
+            input.push_back(inputData[sample]);
+        }
 
         // set current effect
         switch (tabIndex)
@@ -223,7 +256,21 @@ void AudioPluginAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer,
             case 1:
                 fillDelayBuffer (channel, buffer);
                 flanger.readFromDelayBuffer (channel, buffer);
+                if (parameters.getRawParameterValue(FLANGER_FEEDBACK_TOGGLE_ID)->load())
+                    fillDelayBuffer (channel, buffer);
                 break;
+        }
+        
+        for (int sample = 0; sample < buffer.getNumSamples(); ++sample)
+        {
+            // equal power crossfade
+            auto mix = parameters.getRawParameterValue(MIX_ID)->load();
+            channelData[sample] =
+            (channelData[sample] * std::sin(mix * juce::MathConstants<double>::pi / 2.0)) +
+            (input[sample] * std::cos(mix * juce::MathConstants<double>::pi / 2.0));
+
+            // gain
+            channelData[sample] = channelData[sample] * parameters.getRawParameterValue(GAIN_ID)->load();
         }
     }
 
@@ -286,14 +333,23 @@ void AudioPluginAudioProcessor::getStateInformation (juce::MemoryBlock& destData
     // You should use this method to store your parameters in the memory block.
     // You could do that either as raw data, or use the XML or ValueTree classes
     // as intermediaries to make it easy to save and load complex data.
-    juce::ignoreUnused (destData);
+    //juce::ignoreUnused (destData);
+
+    auto state = parameters.copyState();
+    std::unique_ptr<juce::XmlElement> xml (state.createXml());
+    copyXmlToBinary (*xml, destData);
 }
 
 void AudioPluginAudioProcessor::setStateInformation (const void* data, int sizeInBytes)
 {
     // You should use this method to restore your parameters from this memory block,
     // whose contents will have been created by the getStateInformation() call.
-    juce::ignoreUnused (data, sizeInBytes);
+    //juce::ignoreUnused (data, sizeInBytes);
+
+    std::unique_ptr<juce::XmlElement> xmlState (getXmlFromBinary (data, sizeInBytes));
+    if (xmlState.get() != nullptr)
+        if (xmlState->hasTagName (parameters.state.getType()))
+            parameters.replaceState (juce::ValueTree::fromXml (*xmlState));
 }
 
 //==============================================================================

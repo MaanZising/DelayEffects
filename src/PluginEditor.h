@@ -15,12 +15,15 @@ public:
     //==============================================================================
     void paint (juce::Graphics&) override;
     void resized() override;
-    void getTabIndex();
+    void getTabIndex(int index);
 
 private:
     AudioPluginAudioProcessor& processorRef;
     DelayComponent delayPanel { processorRef };
     FlangerComponent flangerPanel { processorRef };
+
+    juce::Slider gainSlider;
+    juce::Slider mixSlider;
 
     //juce::TabbedComponent tabs;
     MyTabComponent tabs;
@@ -28,4 +31,8 @@ private:
     MyLookAndFeel lkfEditor;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (AudioPluginAudioProcessorEditor)
+
+public:
+    std::unique_ptr <juce::AudioProcessorValueTreeState::SliderAttachment> gainSliderAttach;
+    std::unique_ptr <juce::AudioProcessorValueTreeState::SliderAttachment> mixSliderAttach;
 };

@@ -14,6 +14,12 @@
 #define FLANGER_LFO_DEPTH_ID "flanger_lfo_depth"
 #define FLANGER_LFO_DEPTH_NAME "Flanger LFO Depth"
 
+#define FLANGER_FEEDBACK_ID "flanger_feedback"
+#define FLANGER_FEEDBACK_NAME "Flanger Feedback"
+
+#define FLANGER_FEEDBACK_TOGGLE_ID "flanger_feedback_toggle"
+#define FLANGER_FEEDBACK_TOGGLE_NAME "Flanger Feedback Toggle"
+
 class Flanger
 {
 public:

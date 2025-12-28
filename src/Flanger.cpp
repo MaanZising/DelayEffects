@@ -15,14 +15,16 @@ void Flanger::readFromDelayBuffer (int channel, juce::AudioBuffer<float>& buffer
     auto* bufferData = buffer.getWritePointer (channel);
     auto* delayBufferData = delayBuffer->getReadPointer (channel);
     auto delayTime = parameters->getRawParameterValue (FLANGER_DELAY_TIME_ID)->load();
-    auto lfoDepth = parameters->getRawParameterValue (FLANGER_LFO_DEPTH_ID)->load();
-    float g { 0.7f };
     
     // length of audio from in the past
     double delayPosition { *writePosition - (sampleRate * delayTime) };
 
     for (int sample = 0; sample < bufferSize; ++sample)
     {
+
+        auto lfoDepth = parameters->getRawParameterValue (FLANGER_LFO_DEPTH_ID)->load();
+        auto feedback = parameters->getRawParameterValue (FLANGER_FEEDBACK_ID)->load();
+
         auto currentPosition = delayPosition + (getSineWaveData (channel) * sampleRate * delayTime * lfoDepth);
         if (currentPosition < 0)
             currentPosition += static_cast<double>(delayBufferSize);
@@ -39,7 +41,7 @@ void Flanger::readFromDelayBuffer (int channel, juce::AudioBuffer<float>& buffer
 
         updateAngleDelta();
 
-        bufferData[sample] += currentData * g;
+        bufferData[sample] += currentData * feedback;
     }
 }
 
