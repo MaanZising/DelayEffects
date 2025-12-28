@@ -27,6 +27,7 @@ private:
     const int height { 100 };
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (DelayComponent)
+
 public:
     std::unique_ptr <juce::AudioProcessorValueTreeState::SliderAttachment> delayTimeDialAttach;
     std::unique_ptr <juce::AudioProcessorValueTreeState::SliderAttachment> feedbackDialAttach;

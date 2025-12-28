@@ -37,6 +37,8 @@ void Flanger::readFromDelayBuffer (int channel, juce::AudioBuffer<float>& buffer
         while (currentAngle[static_cast<long unsigned int> (channel)] > 2.0 * juce::MathConstants<double>::pi)
             currentAngle[static_cast<long unsigned int> (channel)] -= 2.0 * juce::MathConstants<double>::pi;
 
+        updateAngleDelta();
+
         bufferData[sample] += currentData * g;
     }
 }

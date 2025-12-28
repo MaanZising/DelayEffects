@@ -48,6 +48,7 @@ public:
     
     //==============================================================================
     juce::AudioProcessorValueTreeState parameters;
+    bool clearBuffer { false };
 
 private:
     Delay delay;

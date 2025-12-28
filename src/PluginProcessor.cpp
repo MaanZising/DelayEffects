@@ -13,6 +13,15 @@ AudioPluginAudioProcessor::AudioPluginAudioProcessor()
                        ),
         parameters (*this, nullptr, juce::Identifier ("DEP"), 
         {
+            //////////////////////////////////////////////// current effect
+            std::make_unique<juce::AudioParameterInt>
+            (
+                "tab_index",
+                "Tab Index",
+                0,
+                1,
+                0
+            ),
             //////////////////////////////////////////////// delay
             std::make_unique<juce::AudioParameterFloat>
             (
@@ -33,32 +42,28 @@ AudioPluginAudioProcessor::AudioPluginAudioProcessor()
             (
                 FLANGER_LFO_FREQ_ID,
                 FLANGER_LFO_FREQ_NAME,
-                0.01f,
-                20.f,
+                juce::NormalisableRange<float> (0.01f, 20.00f, 0.01f, 0.4f),
                 0.4f
             ),
             std::make_unique<juce::AudioParameterFloat>
             (
                 FLANGER_LFO_OFFSET_ID,
                 FLANGER_LFO_OFFSET_NAME,
-                0.f,
-                1.f,
-                1.f
+                juce::NormalisableRange<float> (0.f, 1.f, 0.001f),
+                0.5f
             ),
             std::make_unique<juce::AudioParameterFloat>
             (
                 FLANGER_DELAY_TIME_ID,
                 FLANGER_DELAY_TIME_NAME,
-                0.f,
-                1.f,
-                0.02f
+                juce::NormalisableRange<float> (0.000f, 1.000f, 0.001f, 0.4f),
+                0.020f
             ),
             std::make_unique<juce::AudioParameterFloat>
             (
                 FLANGER_LFO_DEPTH_ID,
                 FLANGER_LFO_DEPTH_NAME,
-                0.f,
-                1.f,
+                juce::NormalisableRange<float> (0.f, 1.f, 0.001f),
                 0.5f
             )
         })
@@ -201,19 +206,37 @@ void AudioPluginAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer,
     {
         const auto* inputData = buffer.getReadPointer (channel);
         auto* channelData = buffer.getWritePointer (channel);
+        int tabIndex = static_cast<int> (parameters.getRawParameterValue("tab_index")->load());
 
         // get input signal
         for (int sample = 0; sample < buffer.getNumSamples(); ++sample)
             channelData[sample] = inputData[sample];
 
-        fillDelayBuffer (channel, buffer);
-        delay.readFromDelayBuffer (channel, buffer);
-        //flanger.readFromDelayBuffer (channel, buffer);
-        fillDelayBuffer (channel, buffer);
+        // set current effect
+        switch (tabIndex)
+        {
+            case 0:
+                fillDelayBuffer (channel, buffer);
+                delay.readFromDelayBuffer (channel, buffer);
+                fillDelayBuffer (channel, buffer);
+                break;
+            case 1:
+                fillDelayBuffer (channel, buffer);
+                flanger.readFromDelayBuffer (channel, buffer);
+                break;
+        }
     }
 
     // determine where to write the next block of data to the delay buffer
     updateWritePosition (buffer);
+
+    if (clearBuffer)
+    {
+        for (auto channel = 0; channel < totalNumOutputChannels; ++channel)
+            buffer.clear (channel, 0, buffer.getNumSamples());
+
+        clearBuffer = false;
+    }
 }
 
 void AudioPluginAudioProcessor::updateWritePosition (juce::AudioBuffer<float>& buffer)

@@ -1,7 +1,7 @@
 #include "DelayComponent.h"
 
 //==============================================================================
-DelayComponent::DelayComponent(AudioPluginAudioProcessor& p) : processorRef(p)
+DelayComponent::DelayComponent(AudioPluginAudioProcessor& p) : processorRef (p) 
 {
     //setSize (600, 400);
     
@@ -17,7 +17,6 @@ DelayComponent::DelayComponent(AudioPluginAudioProcessor& p) : processorRef(p)
     feedbackDial.setSliderStyle (juce::Slider::SliderStyle::RotaryVerticalDrag);
     feedbackDial.setTextBoxStyle (juce::Slider::TextBoxBelow, true, 80, 20);
     feedbackDial.setTextBoxIsEditable (true);
-    feedbackDial.setTextValueSuffix (" secs");
     feedbackDial.setLookAndFeel (&lkfDelay);
     addAndMakeVisible (feedbackDial);
 }
