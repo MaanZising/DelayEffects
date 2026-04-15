@@ -1,0 +1,8 @@
+.cache/
+.vscode/
+build/
+JUCE/
+screenshots/
+
+.gitignore
+notes.txt

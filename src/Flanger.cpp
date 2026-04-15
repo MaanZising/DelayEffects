@@ -15,17 +15,21 @@ void Flanger::readFromDelayBuffer (int channel, juce::AudioBuffer<float>& buffer
     auto* bufferData = buffer.getWritePointer (channel);
     auto* delayBufferData = delayBuffer->getReadPointer (channel);
     auto delayTime = parameters->getRawParameterValue (FLANGER_DELAY_TIME_ID)->load();
-    
-    // length of audio from in the past
-    double delayPosition { *writePosition - (sampleRate * delayTime) };
+    //smoothedDelayTime[channel].setTargetValue (delayTime);
+    if (channel == 0)
+        smoothedDelayTime.setTargetValue (delayTime);
 
     for (int sample = 0; sample < bufferSize; ++sample)
     {
+        if (channel == 0)
+            smoothedDelayTimeBuffer.setSample (0, sample, smoothedDelayTime.getNextValue());
+        // length of audio from in the past
+        double delayPosition { *writePosition - (sampleRate * smoothedDelayTimeBuffer.getSample (0, sample)) };
 
         auto lfoDepth = parameters->getRawParameterValue (FLANGER_LFO_DEPTH_ID)->load();
         auto feedback = parameters->getRawParameterValue (FLANGER_FEEDBACK_ID)->load();
 
-        auto currentPosition = delayPosition + (getSineWaveData (channel) * sampleRate * delayTime * lfoDepth);
+        auto currentPosition = delayPosition + (getSineWaveData (channel) * sampleRate * smoothedDelayTimeBuffer.getSample (0, sample) * lfoDepth);
         if (currentPosition < 0)
             currentPosition += static_cast<double>(delayBufferSize);
         int readPosition { static_cast<int>(currentPosition) };

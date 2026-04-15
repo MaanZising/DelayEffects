@@ -183,7 +183,12 @@ void AudioPluginAudioProcessor::prepareToPlay (double sampleRate, int samplesPer
     // initialize flanger
     flanger.updateAngleDelta();
     for (auto channel = 0; channel < getTotalNumOutputChannels(); ++channel)
+    {
         flanger.currentAngle.push_back (0.);
+        //flanger.smoothedDelayTime[channel].reset (sampleRate, samplesPerBlock*2/sampleRate);
+    }
+    flanger.smoothedDelayTime.reset (sampleRate, samplesPerBlock*2/sampleRate);
+    flanger.smoothedDelayTimeBuffer.setSize (1, samplesPerBlock);
 
     juce::ignoreUnused (samplesPerBlock);
 }

@@ -28,6 +28,10 @@ public:
     void updateAngleDelta();
     float getSineWaveData (int channel);
     std::vector<double> currentAngle;
+    //std::vector<juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear>> smoothedFlangerDelayTime;
+    //juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> smoothedDelayTime[2];
+    juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> smoothedDelayTime;
+    juce::AudioBuffer<float> smoothedDelayTimeBuffer;
 private:
     double sampleRate;
     double angleDelta { 0.0 };
