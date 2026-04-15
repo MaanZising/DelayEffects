@@ -258,7 +258,8 @@ struct PropertyDelegate
 
 } // namespace juce::midi_ci
 
-/** @cond */
+#ifndef DOXYGEN
+
 namespace juce
 {
 
@@ -283,4 +284,5 @@ struct SerialisationTraits<midi_ci::PropertySubscriptionCommand>
 };
 
 } // namespace juce
-/** @endcond */
+
+#endif  // ifndef DOXYGEN

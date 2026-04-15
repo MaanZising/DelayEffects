@@ -406,12 +406,10 @@ public:
     /** True if the OS supports semitransparent windows */
     static bool canUseSemiTransparentWindows() noexcept;
 
-   #if JUCE_MAC
-    /** @cond */
+   #if JUCE_MAC && ! defined (DOXYGEN)
     [[deprecated ("This macOS-specific method has been deprecated in favour of the cross-platform "
                   " isDarkModeActive() method.")]]
     static bool isOSXDarkModeActive()  { return Desktop::getInstance().isDarkModeActive(); }
-    /** @endcond */
    #endif
 
     /** Returns true if the desktop environment allows resizing the window by clicking and dragging

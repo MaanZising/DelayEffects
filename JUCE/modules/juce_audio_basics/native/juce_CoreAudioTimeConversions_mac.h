@@ -36,7 +36,7 @@
 // This file will be included directly by macOS/iOS-specific .cpps
 #pragma once
 
-/** @cond */
+#if ! DOXYGEN
 
 #include <mach/mach_time.h>
 
@@ -89,4 +89,4 @@ private:
 
 } // namespace juce
 
-/** @endcond */
+#endif

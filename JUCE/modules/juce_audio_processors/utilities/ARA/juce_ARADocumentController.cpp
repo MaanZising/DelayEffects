@@ -141,7 +141,8 @@ protected:
     void doRequestProcessingAlgorithmForAudioSource (ARA::PlugIn::AudioSource* audioSource,
                                                      ARA::ARAInt32 algorithmIndex) noexcept override;
 
-    /** @cond */
+#ifndef DOXYGEN
+
     //==============================================================================
     bool doRestoreObjectsFromArchive (ARA::PlugIn::HostArchiveReader* archiveReader, const ARA::PlugIn::RestoreObjectsFilter* filter) noexcept override;
     bool doStoreObjectsToArchive (ARA::PlugIn::HostArchiveWriter* archiveWriter, const ARA::PlugIn::StoreObjectsFilter* filter) noexcept override;
@@ -210,10 +211,8 @@ protected:
     void willUpdatePlaybackRegionProperties (ARA::PlugIn::PlaybackRegion* playbackRegion, ARAPlaybackRegion::PropertiesPtr newProperties) noexcept override;
     void didUpdatePlaybackRegionProperties (ARA::PlugIn::PlaybackRegion* playbackRegion) noexcept override;
     void willDestroyPlaybackRegion (ARA::PlugIn::PlaybackRegion* playbackRegion) noexcept override;
-    /** @endcond */
 
 public:
-    /** @cond */
     //==============================================================================
     /** @internal */
     void internalNotifyAudioSourceAnalysisProgressStarted (ARAAudioSource* audioSource) override;
@@ -245,7 +244,7 @@ public:
                                                      ARAContentUpdateScopes scopeFlags,
                                                      bool notifyARAHost) override;
 
-    /** @endcond */
+#endif
 
 private:
     //==============================================================================

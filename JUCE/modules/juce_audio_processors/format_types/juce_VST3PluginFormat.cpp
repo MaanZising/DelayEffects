@@ -35,9 +35,19 @@
 #if JUCE_PLUGINHOST_VST3 && (JUCE_MAC || JUCE_WINDOWS || JUCE_LINUX || JUCE_BSD)
 
 #include "juce_VST3Headers.h"
-#include "juce_VST3Utilities.h"
 #include "juce_VST3Common.h"
 #include "juce_ARACommon.h"
+
+#if JUCE_PLUGINHOST_ARA && (JUCE_MAC || JUCE_WINDOWS || JUCE_LINUX)
+#include <ARA_API/ARAVST3.h>
+
+namespace ARA
+{
+DEF_CLASS_IID (IMainFactory)
+DEF_CLASS_IID (IPlugInEntryPoint)
+DEF_CLASS_IID (IPlugInEntryPoint2)
+}
+#endif
 
 namespace juce
 {
@@ -608,8 +618,8 @@ struct VST3HostContext final : public Vst::IComponentHandler,  // From VST V3.0.
     //==============================================================================
     struct ContextMenu final : public Vst::IContextMenu
     {
-        explicit ContextMenu (VST3PluginInstance& pluginInstance)  : owner (pluginInstance) {}
-        ~ContextMenu() = default;
+        ContextMenu (VST3PluginInstance& pluginInstance)  : owner (pluginInstance) {}
+        virtual ~ContextMenu() {}
 
         JUCE_DECLARE_VST3_COM_REF_METHODS
         JUCE_DECLARE_VST3_COM_QUERY_METHODS
@@ -915,7 +925,7 @@ private:
     {
     public:
         AttributeList() = default;
-        ~AttributeList() = default;
+        virtual ~AttributeList() = default;
 
         JUCE_DECLARE_VST3_COM_REF_METHODS
         JUCE_DECLARE_VST3_COM_QUERY_METHODS
@@ -1002,7 +1012,7 @@ private:
     struct Message final : public Vst::IMessage
     {
         Message() = default;
-        ~Message() = default;
+        virtual ~Message() = default;
 
         JUCE_DECLARE_VST3_COM_REF_METHODS
         JUCE_DECLARE_VST3_COM_QUERY_METHODS
@@ -1922,7 +1932,7 @@ private:
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (VST3PluginWindow)
 };
 
-JUCE_BEGIN_IGNORE_DEPRECATION_WARNINGS
+JUCE_BEGIN_IGNORE_WARNINGS_MSVC (4996) // warning about overriding deprecated methods
 
 //==============================================================================
 static bool hasARAExtension (IPluginFactory* pluginFactory, const String& pluginClassName)
@@ -2180,7 +2190,7 @@ public:
     {
     }
 
-    ~HostToClientParamQueue() = default;
+    virtual ~HostToClientParamQueue() = default;
 
     JUCE_DECLARE_VST3_COM_REF_METHODS
     JUCE_DECLARE_VST3_COM_QUERY_METHODS
@@ -2285,7 +2295,7 @@ public:
     {
     }
 
-    ~ClientToHostParamQueue() = default;
+    virtual ~ClientToHostParamQueue() = default;
 
     JUCE_DECLARE_VST3_COM_REF_METHODS
     JUCE_DECLARE_VST3_COM_QUERY_METHODS
@@ -2366,7 +2376,7 @@ class ParameterChanges final : public Vst::IParameterChanges
     using Queues = std::vector<Entry*>;
 
 public:
-    ~ParameterChanges() = default;
+    virtual ~ParameterChanges() = default;
 
     JUCE_DECLARE_VST3_COM_REF_METHODS
     JUCE_DECLARE_VST3_COM_QUERY_METHODS
@@ -2583,11 +2593,6 @@ public:
             return cachedInfo;
         }
 
-        Steinberg::int32 getVstParamIndex() const
-        {
-            return vstParamIndex;
-        }
-
     private:
         Vst::ParameterInfo fetchParameterInfo() const
         {
@@ -2611,7 +2616,7 @@ public:
 
     ~VST3PluginInstance() override
     {
-        MessageManager::callSync ([this] { cleanup(); });
+        callOnMessageThread ([this] { cleanup(); });
     }
 
     void cleanup()
@@ -3080,22 +3085,6 @@ public:
         return result;
     }
 
-    std::optional<String> getNameForMidiNoteNumber (int note, int /*midiChannel*/) override
-    {
-        if (unitInfo == nullptr || unitInfo->getProgramListCount() == 0)
-            return std::nullopt;
-
-        Vst::String128 name{};
-        Vst::ProgramListInfo programListInfo{};
-
-        const auto nameOk = unitInfo->getProgramListInfo (0, programListInfo)      == kResultOk
-                         && unitInfo->hasProgramPitchNames (programListInfo.id, 0) == kResultTrue
-                         && unitInfo->getProgramPitchName (programListInfo.id, 0, (Steinberg::int16) note, name) == kResultOk;
-
-        return nameOk ? std::make_optional (toString (name))
-                      : std::nullopt;
-    }
-
     //==============================================================================
     void updateTrackProperties (const TrackProperties& properties) override
     {
@@ -3108,8 +3097,8 @@ public:
 
     struct TrackPropertiesAttributeList final : public Vst::IAttributeList
     {
-        explicit TrackPropertiesAttributeList (const TrackProperties& properties) : props (properties) {}
-        ~TrackPropertiesAttributeList() = default;
+        TrackPropertiesAttributeList (const TrackProperties& properties) : props (properties) {}
+        virtual ~TrackPropertiesAttributeList() {}
 
         JUCE_DECLARE_VST3_COM_REF_METHODS
 
@@ -3132,11 +3121,8 @@ public:
         {
             if (! std::strcmp (id, Vst::ChannelContext::kChannelNameKey))
             {
-                if (props.name.has_value())
-                {
-                    Steinberg::String str (props.name->toRawUTF8());
-                    str.copyTo (string, 0, (Steinberg::int32) jmin (size, (Steinberg::uint32) std::numeric_limits<Steinberg::int32>::max()));
-                }
+                Steinberg::String str (props.name.toRawUTF8());
+                str.copyTo (string, 0, (Steinberg::int32) jmin (size, (Steinberg::uint32) std::numeric_limits<Steinberg::int32>::max()));
 
                 return kResultTrue;
             }
@@ -3146,12 +3132,9 @@ public:
 
         tresult PLUGIN_API getInt (AttrID id, Steinberg::int64& value) override
         {
-            if (! std::strcmp (Vst::ChannelContext::kChannelNameLengthKey, id))
-                value = props.name.value_or (String{}).length();
-            else if (! std::strcmp (Vst::ChannelContext::kChannelColorKey, id))
-                value = static_cast<Steinberg::int64> (props.colour.value_or (Colours::transparentBlack).getARGB());
-            else
-                return kResultFalse;
+            if      (! std::strcmp (Vst::ChannelContext::kChannelNameLengthKey, id)) value = props.name.length();
+            else if (! std::strcmp (Vst::ChannelContext::kChannelColorKey,      id)) value = static_cast<Steinberg::int64> (props.colour.getARGB());
+            else return kResultFalse;
 
             return kResultTrue;
         }
@@ -3787,21 +3770,12 @@ private:
 
         if (acceptsMidi())
         {
-            const auto midiMessageCallback = [&] (auto controlID, float paramValue, auto time)
+            const auto midiMessageCallback = [&] (auto controlID, auto paramValue, auto time)
             {
                 Steinberg::int32 queueIndex{};
 
                 if (auto* queue = inputParameterChanges->addParameterData (controlID, queueIndex))
-                    queue->append ({ (Steinberg::int32) time, paramValue });
-
-                if (auto* param = getParameterForID (controlID))
-                {
-                    // Send the parameter value to the editor
-                    parameterDispatcher.push (param->getVstParamIndex(), paramValue);
-
-                    // Update the host's view of the parameter value
-                    param->setValueWithoutUpdatingProcessor (paramValue);
-                }
+                    queue->append ({ (Steinberg::int32) time, (float) paramValue });
             };
 
             MidiEventList::hostToPluginEventList (*midiInputs,
@@ -3917,7 +3891,7 @@ private:
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (VST3PluginInstance)
 };
 
-JUCE_END_IGNORE_DEPRECATION_WARNINGS
+JUCE_END_IGNORE_WARNINGS_MSVC
 
 //==============================================================================
 tresult VST3HostContext::beginEdit (Vst::ParamID paramID)

@@ -140,18 +140,15 @@ public:
     ~SharedSession()
     {
         std::unique_lock lock { mutex };
-
-        if (session != nullptr)
-            [session.get() finishTasksAndInvalidate];
-
-        condvar.wait (lock, [&] { return session == nullptr; });
+        [session.get() finishTasksAndInvalidate];
+        condvar.wait (lock, [&] { return state == State::stopped; });
     }
 
     NSUniquePtr<NSURLSessionTask> addTask (NSURLRequest* request, SessionListener* listener)
     {
         std::unique_lock lock { mutex };
 
-        if (session == nullptr)
+        if (state != State::running)
             return nullptr;
 
         NSUniquePtr<NSURLSessionTask> task { [[session.get() dataTaskWithRequest: request] retain] };
@@ -173,28 +170,28 @@ private:
             DBG (nsStringToJuce ([error description]));
        #endif
 
-        const auto toNotify = std::invoke ([&]
+        const auto toNotify = [&]
         {
             const std::scoped_lock lock { mutex };
-            session.reset();
+            state = State::stopRequested;
             // Take a copy of listenerForTask so that we don't need to hold the lock while
             // iterating through the remaining listeners.
-            return std::exchange (listenerForTask, {});
-        });
+            return listenerForTask;
+        }();
 
         for (const auto& pair : toNotify)
             pair.second->didComplete (error);
 
-        // Important: we keep the lock held while calling condvar.notify_all().
+        const std::scoped_lock lock { mutex };
+        listenerForTask.clear();
+        state = State::stopped;
+
+        // Important: we keep the lock held while calling condvar.notify_one().
         // If we don't, then it's possible that when the destructor runs, it will wake
         // before we notify the condvar on this thread, allowing the destructor to continue
         // and destroying the condition variable. When didBecomeInvalid resumes, the condition
         // variable will have been destroyed.
-        // Use notify_all() rather than notify_one() so that all threads waiting
-        // in removeTask() can make progress in the case that the session is
-        // invalidated unexpectedly.
-        const std::scoped_lock lock { mutex };
-        condvar.notify_all();
+        condvar.notify_one();
     }
 
     void didComplete (NSURLSessionTask* task, [[maybe_unused]] NSError* error)
@@ -216,7 +213,7 @@ private:
             listenerForTask.erase ([task taskIdentifier]);
         }
 
-        condvar.notify_all();
+        condvar.notify_one();
     }
 
     void didReceiveResponse (NSURLSessionTask* task,
@@ -327,6 +324,13 @@ private:
         }
     };
 
+    enum class State
+    {
+        running,
+        stopRequested,
+        stopped,
+    };
+
     std::mutex mutex;
     std::condition_variable condvar;
 
@@ -339,6 +343,8 @@ private:
     };
 
     std::map<NSUInteger, SessionListener*> listenerForTask;
+
+    State state = State::running;
 };
 
 class TaskToken

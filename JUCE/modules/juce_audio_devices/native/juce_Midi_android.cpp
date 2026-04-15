@@ -798,7 +798,7 @@ constexpr unsigned char javaMidiByteCode[]
  METHOD (openMidiInputPortWithID,                  "openMidiInputPortWithID",                  "(IJ)Lcom/rmsl/juce/JuceMidiSupport$JuceMidiPort;") \
  METHOD (openMidiOutputPortWithID,                 "openMidiOutputPortWithID",                 "(I)Lcom/rmsl/juce/JuceMidiSupport$JuceMidiPort;")
 
-DECLARE_JNI_CLASS (MidiDeviceManager, "com/rmsl/juce/JuceMidiSupport$MidiDeviceManager")
+DECLARE_JNI_CLASS_WITH_MIN_SDK (MidiDeviceManager, "com/rmsl/juce/JuceMidiSupport$MidiDeviceManager", 23)
 #undef JNI_CLASS_MEMBERS
 
 #define JNI_CLASS_MEMBERS(METHOD, STATICMETHOD, FIELD, STATICFIELD, CALLBACK) \
@@ -808,7 +808,7 @@ DECLARE_JNI_CLASS (MidiDeviceManager, "com/rmsl/juce/JuceMidiSupport$MidiDeviceM
  METHOD (sendMidi, "sendMidi", "([BII)V") \
  METHOD (getName,  "getName",  "()Ljava/lang/String;")
 
-DECLARE_JNI_CLASS (JuceMidiPort, "com/rmsl/juce/JuceMidiSupport$JuceMidiPort")
+DECLARE_JNI_CLASS_WITH_MIN_SDK (JuceMidiPort, "com/rmsl/juce/JuceMidiSupport$JuceMidiPort", 23)
 #undef JNI_CLASS_MEMBERS
 
 //==============================================================================
@@ -928,7 +928,7 @@ private:
 #define JNI_CLASS_MEMBERS(METHOD, STATICMETHOD, FIELD, STATICFIELD, CALLBACK) \
  CALLBACK (generatedCallback<&MidiInput::Pimpl::handleReceive>, "handleReceive", "(J[BIIJ)V" )
 
-DECLARE_JNI_CLASS (JuceMidiInputPort, "com/rmsl/juce/JuceMidiSupport$JuceMidiInputPort")
+DECLARE_JNI_CLASS_WITH_MIN_SDK (JuceMidiInputPort, "com/rmsl/juce/JuceMidiSupport$JuceMidiInputPort", 23)
 #undef JNI_CLASS_MEMBERS
 
 //==============================================================================
@@ -1014,18 +1014,24 @@ private:
 //==============================================================================
 Array<MidiDeviceInfo> MidiInput::getAvailableDevices()
 {
+    if (getAndroidSDKVersion() < 23)
+        return {};
+
     AndroidMidiDeviceManager manager;
     return manager.getDevices (true);
 }
 
 MidiDeviceInfo MidiInput::getDefaultDevice()
 {
+    if (getAndroidSDKVersion() < 23)
+        return {};
+
     return getAvailableDevices().getFirst();
 }
 
 std::unique_ptr<MidiInput> MidiInput::openDevice (const String& deviceIdentifier, MidiInputCallback* callback)
 {
-    if (deviceIdentifier.isEmpty())
+    if (getAndroidSDKVersion() < 23 || deviceIdentifier.isEmpty())
         return {};
 
     AndroidMidiDeviceManager manager;
@@ -1045,6 +1051,9 @@ std::unique_ptr<MidiInput> MidiInput::openDevice (const String& deviceIdentifier
 
 StringArray MidiInput::getDevices()
 {
+    if (getAndroidSDKVersion() < 23)
+        return {};
+
     StringArray deviceNames;
 
     for (auto& d : getAvailableDevices())
@@ -1055,7 +1064,7 @@ StringArray MidiInput::getDevices()
 
 int MidiInput::getDefaultDeviceIndex()
 {
-    return 0;
+    return (getAndroidSDKVersion() < 23 ? -1 : 0);
 }
 
 std::unique_ptr<MidiInput> MidiInput::openDevice (int index, MidiInputCallback* callback)
@@ -1085,18 +1094,24 @@ void MidiInput::stop()
 //==============================================================================
 Array<MidiDeviceInfo> MidiOutput::getAvailableDevices()
 {
+    if (getAndroidSDKVersion() < 23)
+        return {};
+
     AndroidMidiDeviceManager manager;
     return manager.getDevices (false);
 }
 
 MidiDeviceInfo MidiOutput::getDefaultDevice()
 {
+    if (getAndroidSDKVersion() < 23)
+        return {};
+
     return getAvailableDevices().getFirst();
 }
 
 std::unique_ptr<MidiOutput> MidiOutput::openDevice (const String& deviceIdentifier)
 {
-    if (deviceIdentifier.isEmpty())
+    if (getAndroidSDKVersion() < 23 || deviceIdentifier.isEmpty())
         return {};
 
     AndroidMidiDeviceManager manager;
@@ -1115,6 +1130,9 @@ std::unique_ptr<MidiOutput> MidiOutput::openDevice (const String& deviceIdentifi
 
 StringArray MidiOutput::getDevices()
 {
+    if (getAndroidSDKVersion() < 23)
+        return {};
+
     StringArray deviceNames;
 
     for (auto& d : getAvailableDevices())
@@ -1125,7 +1143,7 @@ StringArray MidiOutput::getDevices()
 
 int MidiOutput::getDefaultDeviceIndex()
 {
-    return 0;
+    return (getAndroidSDKVersion() < 23 ? -1 : 0);
 }
 
 std::unique_ptr<MidiOutput> MidiOutput::openDevice (int index)

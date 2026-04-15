@@ -371,16 +371,10 @@ struct iOSAudioIODevice::Pimpl final : public AsyncUpdater
 
         if (category == AVAudioSessionCategoryPlayAndRecord)
         {
-           #if JUCE_IOS_API_VERSION_CAN_BE_BUILT (26, 0)
-            constexpr auto bluetoothOption = AVAudioSessionCategoryOptionAllowBluetoothHFP;
-           #else
-            constexpr auto bluetoothOption = AVAudioSessionCategoryOptionAllowBluetooth;
-           #endif
-
             options |= AVAudioSessionCategoryOptionDefaultToSpeaker
+                     | AVAudioSessionCategoryOptionAllowBluetooth
                      | AVAudioSessionCategoryOptionAllowAirPlay
-                     | AVAudioSessionCategoryOptionAllowBluetoothA2DP
-                     | bluetoothOption;
+                     | AVAudioSessionCategoryOptionAllowBluetoothA2DP;
         }
 
         JUCE_NSERROR_CHECK ([[AVAudioSession sharedInstance] setCategory: category
@@ -411,9 +405,6 @@ struct iOSAudioIODevice::Pimpl final : public AsyncUpdater
 
     int tryBufferSize (const double currentSampleRate, const int newBufferSize)
     {
-        if (newBufferSize == getBufferSize (currentSampleRate))
-            return newBufferSize;
-
         const auto extraOffset = std::invoke ([&]
         {
             // Older iOS versions (iOS 12) seem to require that the requested buffer size is a bit
@@ -429,13 +420,17 @@ struct iOSAudioIODevice::Pimpl final : public AsyncUpdater
 
         auto session = [AVAudioSession sharedInstance];
 
+        // According to the apple docs, it's best to set preferred sample rates and block sizes
+        // while the device is inactive, and then to query the real values after activation.
+        // Unfortunately, on iOS 18.0, the real block size isn't immediately available after
+        // a call to setActive, so we also need to wait for the first audio callback.
+        // This will be slow!
+        // https://developer.apple.com/library/archive/qa/qa1631/_index.html
+        setAudioSessionActive (false);
+
         JUCE_NSERROR_CHECK ([session setPreferredIOBufferDuration: bufferDuration error: &error]);
 
-        // iOS requires additional effort to observe the actual buffer size
-        // change however, it seems the buffer size change will always work
-        // so instead we just assume the change will apply eventually
-        if (@available (ios 18, *))
-            return newBufferSize;
+        setAudioSessionActive (true);
 
         return getBufferSize (currentSampleRate);
     }
@@ -482,81 +477,11 @@ struct iOSAudioIODevice::Pimpl final : public AsyncUpdater
         JUCE_IOS_AUDIO_LOG ("Buffer size after detecting available buffer sizes: " << bufferSize);
     }
 
-    API_AVAILABLE (ios (18))
-    std::optional<double> getSampleRateFromAudioQueue() const
-    {
-        AudioStreamBasicDescription stream{};
-        stream.mFormatID = kAudioFormatLinearPCM;
-        stream.mChannelsPerFrame = 2;
-        stream.mBitsPerChannel = 32;
-        stream.mFramesPerPacket = 1;
-        stream.mBytesPerFrame = stream.mChannelsPerFrame * stream.mBitsPerChannel / 8;
-        stream.mBytesPerPacket = stream.mBytesPerFrame * stream.mFramesPerPacket;
-        stream.mFormatFlags = stream.mBitsPerChannel;
-        stream.mFormatFlags = kLinearPCMFormatFlagIsSignedInteger
-                            | kLinearPCMFormatFlagIsBigEndian
-                            | kLinearPCMFormatFlagIsPacked;
-
-        AudioQueueRef audioQueue;
-
-        const auto err = AudioQueueNewOutput (&stream,
-                                              [] (auto, auto, auto) {},
-                                              nullptr,
-                                              nullptr,
-                                              kCFRunLoopCommonModes,
-                                              0,
-                                              &audioQueue);
-
-        if (err != noErr || audioQueue == nullptr)
-        {
-            jassertfalse;
-            return {};
-        }
-
-        const ScopeGuard disposeAudioQueueOnReturn { [&]
-        {
-            AudioQueueDispose (audioQueue, true);
-        }};
-
-        double result{};
-
-        UInt32 size = sizeof (sampleRate);
-        const auto propErr = AudioQueueGetProperty (audioQueue,
-                                                    kAudioQueueDeviceProperty_SampleRate,
-                                                    &result,
-                                                    &size);
-
-        if (propErr != noErr || size != sizeof (result))
-        {
-            jassertfalse;
-            return {};
-        }
-
-        return result;
-    }
-
-    double getSampleRate() const
-    {
-        const auto session = [AVAudioSession sharedInstance];
-
-        // On iOS 18 the AVAudioSession sample rate is not always accurate but
-        // probing the sample rate via an AudioQueue seems to work reliably
-        if (@available (ios 18, *))
-            return getSampleRateFromAudioQueue().value_or (session.sampleRate);
-
-        return session.sampleRate;
-    }
-
     double trySampleRate (double rate)
     {
-        if (exactlyEqual (rate, getSampleRate()))
-            return rate;
-
         auto session = [AVAudioSession sharedInstance];
-
         JUCE_NSERROR_CHECK ([session setPreferredSampleRate: rate error: &error]);
-
-        return getSampleRate();
+        return session.sampleRate;
     }
 
     // Important: the supported audio sample rates change on the iPhone 6S
@@ -569,79 +494,55 @@ struct iOSAudioIODevice::Pimpl final : public AsyncUpdater
             return;
         }
 
-        const auto deviceId = std::invoke ([]
+        availableSampleRates.clear();
+
+        AudioUnitRemovePropertyListenerWithUserData (audioUnit,
+                                                     kAudioUnitProperty_StreamFormat,
+                                                     dispatchAudioUnitPropertyChange,
+                                                     this);
+
+        const double lowestRate = trySampleRate (4000);
+        availableSampleRates.add (lowestRate);
+        const double highestRate = trySampleRate (192000);
+
+        JUCE_IOS_AUDIO_LOG ("Lowest supported sample rate: "  << lowestRate);
+        JUCE_IOS_AUDIO_LOG ("Highest supported sample rate: " << highestRate);
+
+        for (double rate = lowestRate + 1000; rate < highestRate; rate += 1000)
         {
-            const auto route = [AVAudioSession sharedInstance].currentRoute;
+            const double supportedRate = trySampleRate (rate);
+            JUCE_IOS_AUDIO_LOG ("Trying a sample rate of " << rate << ", got " << supportedRate);
+            availableSampleRates.addIfNotAlreadyThere (supportedRate);
+            rate = jmax (rate, supportedRate);
+        }
 
-            const auto describePorts = [] (auto ports, auto& id)
-            {
-                String description;
-                auto count = 0;
+        availableSampleRates.addIfNotAlreadyThere (highestRate);
 
-                for (AVAudioSessionPortDescription* port in ports)
-                    description << nsStringToJuce (port.UID) << id << count++;
+        // Reset sample rate back to the original, so that we don't end up stuck on the highest rate
+        sampleRate = trySampleRate (sampleRate);
+        bufferSize = getBufferSize (sampleRate);
 
-                return description;
-            };
+        AudioUnitAddPropertyListener (audioUnit,
+                                      kAudioUnitProperty_StreamFormat,
+                                      dispatchAudioUnitPropertyChange,
+                                      this);
 
-            return describePorts (route.inputs, "i")
-                 + describePorts (route.outputs, "o");
-        });
+        // Check the current stream format in case things have changed whilst we
+        // were going through the sample rates
+        handleStreamFormatChange();
 
-        availableSampleRates = deviceSampleRatesCache.get (deviceId, [&] ([[maybe_unused]] auto key)
+       #if JUCE_IOS_AUDIO_LOGGING
         {
-            JUCE_IOS_AUDIO_LOG ("Finding supported sample rates for: " << key);
+            String info ("Available sample rates:");
 
-            Array<double> sampleRates;
+            for (auto rate : availableSampleRates)
+                info << " " << rate;
 
-            AudioUnitRemovePropertyListenerWithUserData (audioUnit,
-                                                         kAudioUnitProperty_StreamFormat,
-                                                         dispatchAudioUnitPropertyChange,
-                                                         this);
+            JUCE_IOS_AUDIO_LOG (info);
+        }
+       #endif
 
-            const double lowestRate = trySampleRate (4000);
-            sampleRates.add (lowestRate);
-            const double highestRate = trySampleRate (192000);
-
-            JUCE_IOS_AUDIO_LOG ("Lowest supported sample rate: "  << lowestRate);
-            JUCE_IOS_AUDIO_LOG ("Highest supported sample rate: " << highestRate);
-
-            for (double rate = lowestRate + 1000; rate < highestRate; rate += 1000)
-            {
-                const double supportedRate = trySampleRate (rate);
-                JUCE_IOS_AUDIO_LOG ("Trying a sample rate of " << rate << ", got " << supportedRate);
-                sampleRates.addIfNotAlreadyThere (supportedRate);
-                rate = jmax (rate, supportedRate);
-            }
-
-            sampleRates.addIfNotAlreadyThere (highestRate);
-
-            sampleRate = trySampleRate (sampleRate);
-
-            AudioUnitAddPropertyListener (audioUnit,
-                                          kAudioUnitProperty_StreamFormat,
-                                          dispatchAudioUnitPropertyChange,
-                                          this);
-
-            // Check the current stream format in case things have changed whilst we
-            // were going through the sample rates
-            handleStreamFormatChange();
-
-           #if JUCE_IOS_AUDIO_LOGGING
-            {
-                String info ("Available sample rates:");
-
-                for (auto rate : availableSampleRates)
-                    info << " " << rate;
-
-                JUCE_IOS_AUDIO_LOG (info);
-            }
-           #endif
-
-            JUCE_IOS_AUDIO_LOG ("Sample rate after detecting available sample rates: " << sampleRate);
-
-            return sampleRates;
-        });
+        JUCE_IOS_AUDIO_LOG ("Sample rate after detecting available sample rates: " << sampleRate);
     }
 
     void updateHardwareInfo (bool forceUpdate = false)
@@ -695,8 +596,8 @@ struct iOSAudioIODevice::Pimpl final : public AsyncUpdater
         setAudioSessionCategory (requestedInputChannels > 0 ? AVAudioSessionCategoryPlayAndRecord
                                                             : AVAudioSessionCategoryPlayback);
         channelData.reconfigure (requestedInputChannels, requestedOutputChannels);
-        setTargetSampleRateAndBufferSize();
         updateHardwareInfo (true);
+        setTargetSampleRateAndBufferSize();
         fixAudioRouteIfSetToReceiver();
 
         isRunning = true;
@@ -914,7 +815,7 @@ struct iOSAudioIODevice::Pimpl final : public AsyncUpdater
 
     //==============================================================================
    #if JUCE_MODULE_AVAILABLE_juce_graphics
-    JUCE_BEGIN_IGNORE_DEPRECATION_WARNINGS
+    JUCE_BEGIN_IGNORE_WARNINGS_GCC_LIKE ("-Wdeprecated-declarations")
     Image getIcon (int size)
     {
        #if TARGET_OS_MACCATALYST
@@ -930,7 +831,7 @@ struct iOSAudioIODevice::Pimpl final : public AsyncUpdater
 
         return {};
     }
-    JUCE_END_IGNORE_DEPRECATION_WARNINGS
+    JUCE_END_IGNORE_WARNINGS_GCC_LIKE
    #endif
 
     void switchApplication()
@@ -1345,8 +1246,8 @@ struct iOSAudioIODevice::Pimpl final : public AsyncUpdater
 
         }
 
-        setTargetSampleRateAndBufferSize();
         updateHardwareInfo();
+        setTargetSampleRateAndBufferSize();
 
         if (isRunning)
         {
@@ -1584,8 +1485,6 @@ struct iOSAudioIODevice::Pimpl final : public AsyncUpdater
 
     Array<double> availableSampleRates;
     Array<int> availableBufferSizes;
-
-    static inline LruCache<String, Array<double>> deviceSampleRatesCache;
 
     bool interAppAudioConnected = false;
 

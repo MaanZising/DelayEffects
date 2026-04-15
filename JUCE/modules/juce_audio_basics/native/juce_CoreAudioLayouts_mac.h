@@ -32,11 +32,10 @@
   ==============================================================================
 */
 
-/** @cond */
 namespace juce
 {
 
-#if JUCE_MAC || JUCE_IOS
+#if ! defined (DOXYGEN) && (JUCE_MAC || JUCE_IOS)
 
 struct CoreAudioLayouts
 {
@@ -362,4 +361,3 @@ private:
 #endif
 
 } // namespace juce
-/** @endcond */

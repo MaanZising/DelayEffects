@@ -118,11 +118,11 @@ public:
     int getSize() const noexcept            { return size; }
 
     //==============================================================================
-    /** @internal */
-    /** @cond */
+   #ifndef DOXYGEN
+    /* internal */
     struct Instance;
     template <typename> struct EngineImpl;
-    /** @endcond */
+   #endif
 
 private:
     //==============================================================================

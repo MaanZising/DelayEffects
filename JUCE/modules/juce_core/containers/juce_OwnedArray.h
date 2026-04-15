@@ -806,11 +806,11 @@ public:
     using ScopedLockType = typename TypeOfCriticalSectionToUse::ScopedLockType;
 
     //==============================================================================
-    /** @cond */
+   #ifndef DOXYGEN
     [[deprecated ("This method has been replaced by a more flexible templated version and renamed "
                  "to swapWith to be more consistent with the names used in other classes.")]]
     void swapWithArray (OwnedArray& other) noexcept { swapWith (other); }
-    /** @endcond */
+   #endif
 
 private:
     //==============================================================================

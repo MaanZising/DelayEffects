@@ -103,9 +103,9 @@ public:
     */
     void setSuspended (bool shouldBeSuspended);
 
-    /** @cond */
+   #ifndef DOXYGEN
     JUCE_DECLARE_SINGLETON_INLINE (Analytics, false)
-    /** @endcond */
+   #endif
 
 private:
     //==============================================================================

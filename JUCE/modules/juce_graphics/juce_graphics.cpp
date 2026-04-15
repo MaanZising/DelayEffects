@@ -49,12 +49,10 @@
 
 #include "juce_graphics.h"
 
-#include "fonts/juce_FunctionPointerDestructor.h"
-
 //==============================================================================
 #if JUCE_MAC
  #import <QuartzCore/QuartzCore.h>
- #include <CoreImage/CoreImage.h>
+ #include <CoreImage/CIRenderDestination.h>
  #include <CoreText/CTFont.h>
 
 #elif JUCE_WINDOWS
@@ -96,8 +94,6 @@
   #pragma comment(lib, "DComp.lib")
   #pragma comment(lib, "dxguid.lib")
  #endif
-
- #include "native/juce_Direct2DPixelDataPage_windows.h"
 
 #elif JUCE_IOS
  #import <QuartzCore/QuartzCore.h>
@@ -161,10 +157,8 @@ extern "C"
 #endif
 
 //==============================================================================
-#include "juce_core/zip/juce_zlib.h"
-
+#include "fonts/juce_FunctionPointerDestructor.h"
 #include "native/juce_EventTracing.h"
-#include "images/juce_ImagePixelDataNativeExtensions.h"
 
 #include "unicode/juce_UnicodeGenerated.cpp"
 #include "unicode/juce_UnicodeUtils.cpp"
@@ -193,14 +187,12 @@ extern "C"
 #include "image_formats/juce_PNGLoader.cpp"
 #include "fonts/juce_AttributedString.cpp"
 #include "fonts/juce_Typeface.cpp"
-#include "fonts/juce_FontFeatures.cpp"
 #include "fonts/juce_FontOptions.cpp"
 #include "fonts/juce_Font.cpp"
 #include "detail/juce_Ranges.cpp"
-#include "detail/juce_SimpleShapedText.cpp"
-#include "detail/juce_JustifiedText.cpp"
-#include "detail/juce_ShapedText.cpp"
-#include "fonts/juce_GlyphArrangementOptions.cpp"
+#include "fonts/juce_SimpleShapedText.cpp"
+#include "fonts/juce_JustifiedText.cpp"
+#include "fonts/juce_ShapedText.cpp"
 #include "fonts/juce_GlyphArrangement.cpp"
 #include "fonts/juce_TextLayout.cpp"
 #include "effects/juce_DropShadowEffect.cpp"
@@ -225,16 +217,17 @@ extern "C"
 #elif JUCE_WINDOWS
  #include "native/juce_Direct2DMetrics_windows.h"
  #include "native/juce_Direct2DGraphicsContext_windows.h"
+ #include "native/juce_Direct2DHwndContext_windows.h"
  #include "native/juce_DirectX_windows.h"
  #include "native/juce_Direct2DImage_windows.h"
- #include "native/juce_Direct2DGraphicsContextImpl_windows.h"
  #include "native/juce_Direct2DImageContext_windows.h"
 
- #include "native/juce_DirectX_windows.cpp"
  #include "native/juce_DirectWriteTypeface_windows.cpp"
  #include "native/juce_IconHelpers_windows.cpp"
- #include "native/juce_Direct2DGraphicsContextImpl_windows.cpp"
+ #include "native/juce_Direct2DHelpers_windows.cpp"
+ #include "native/juce_Direct2DResources_windows.cpp"
  #include "native/juce_Direct2DGraphicsContext_windows.cpp"
+ #include "native/juce_Direct2DHwndContext_windows.cpp"
  #include "native/juce_Direct2DImageContext_windows.cpp"
  #include "native/juce_Direct2DImage_windows.cpp"
  #include "native/juce_Direct2DMetrics_windows.cpp"

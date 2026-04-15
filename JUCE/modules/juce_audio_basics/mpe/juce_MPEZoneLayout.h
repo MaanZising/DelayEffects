@@ -226,9 +226,9 @@ public:
     /** Removes a listener. */
     void removeListener (Listener* const listenerToRemove) noexcept;
 
-    /** @cond */
+   #ifndef DOXYGEN
     using Zone = MPEZone;
-    /** @endcond */
+   #endif
 
 private:
     //==============================================================================

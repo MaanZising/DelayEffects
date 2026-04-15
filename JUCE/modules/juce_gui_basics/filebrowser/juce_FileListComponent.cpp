@@ -72,8 +72,6 @@ void FileListComponent::scrollToTop()
 
 void FileListComponent::setSelectedFile (const File& f)
 {
-    lastDirectory = directoryContentsList.getDirectory();
-
     if (! directoryContentsList.isStillLoading())
     {
         for (int i = directoryContentsList.getNumFiles(); --i >= 0;)

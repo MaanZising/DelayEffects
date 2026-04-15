@@ -426,10 +426,10 @@ public:
     };
 
     //==============================================================================
-    /** @cond */
+   #ifndef DOXYGEN
     [[deprecated ("This method's parameters have changed.")]]
     void setToggleState (bool, bool);
-    /** @endcond */
+   #endif
 
 protected:
     //==============================================================================

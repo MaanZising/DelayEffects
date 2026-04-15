@@ -35,8 +35,6 @@
 namespace juce
 {
 
-#define JUCE_PUSH_NOTIFICATIONS_IMPL 1
-
 struct PushNotificationsDelegateDetails
 {
     //==============================================================================
@@ -303,9 +301,9 @@ bool PushNotifications::Notification::isValid() const noexcept
 }
 
 //==============================================================================
-struct PushNotifications::Impl
+struct PushNotifications::Pimpl
 {
-    explicit Impl (PushNotifications& p)
+    Pimpl (PushNotifications& p)
         : owner (p)
     {
         Class::setThis (delegate.get(), this);
@@ -557,7 +555,7 @@ private:
         Class()
             : ObjCClass ("JucePushNotificationsDelegate_")
         {
-            addIvar<Impl*> ("self");
+            addIvar<Pimpl*> ("self");
 
             addMethod (@selector (application:didRegisterForRemoteNotificationsWithDeviceToken:), [] (id self, SEL, UIApplication*, NSData* data)
             {
@@ -598,8 +596,8 @@ private:
         }
 
         //==============================================================================
-        static Impl& getThis (id self)          { return *getIvar<Impl*> (self, "self"); }
-        static void setThis (id self, Impl* d)  { object_setInstanceVariable (self, "self", d); }
+        static Pimpl& getThis (id self)         { return *getIvar<Pimpl*> (self, "self"); }
+        static void setThis (id self, Pimpl* d) { object_setInstanceVariable (self, "self", d); }
     };
 
     //==============================================================================

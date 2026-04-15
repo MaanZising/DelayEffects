@@ -654,8 +654,12 @@ AudioFormatReader* CoreAudioFormat::createReaderFor (InputStream* sourceStream,
     return nullptr;
 }
 
-std::unique_ptr<AudioFormatWriter> CoreAudioFormat::createWriterFor (std::unique_ptr<OutputStream>&,
-                                                                     const AudioFormatWriterOptions&)
+AudioFormatWriter* CoreAudioFormat::createWriterFor (OutputStream*,
+                                                     double /*sampleRateToUse*/,
+                                                     unsigned int /*numberOfChannels*/,
+                                                     int /*bitsPerSample*/,
+                                                     const StringPairArray& /*metadataValues*/,
+                                                     int /*qualityOptionIndex*/)
 {
     jassertfalse; // not yet implemented!
     return nullptr;

@@ -183,6 +183,29 @@ public:
     JuceAppLifecycle (juce::JUCEApplicationBase* (*initSymbolAddr)())
         : createApplicationSymbol (initSymbolAddr)
     {
+        LocalRef<jobject> appContext (getAppContext());
+
+        if (appContext != nullptr)
+        {
+            auto* env = getEnv();
+
+            myself = GlobalRef (CreateJavaInterface (this, "android/app/Application$ActivityLifecycleCallbacks"));
+            env->CallVoidMethod (appContext.get(), AndroidApplication.registerActivityLifecycleCallbacks, myself.get());
+        }
+    }
+
+    ~JuceAppLifecycle() override
+    {
+        LocalRef<jobject> appContext (getAppContext());
+
+        if (appContext != nullptr && myself != nullptr)
+        {
+            auto* env = getEnv();
+
+            clear();
+            env->CallVoidMethod (appContext.get(), AndroidApplication.unregisterActivityLifecycleCallbacks, myself.get());
+            myself.clear();
+        }
     }
 
     void onActivityCreated (jobject, jobject) override
@@ -269,7 +292,6 @@ private:
     GlobalRef myself;
     juce::JUCEApplicationBase* (*createApplicationSymbol)();
     bool hasBeenInitialised = false;
-    ActivityLifecycleCallbackForwarder forwarder { GlobalRef { getAppContext() }, this };
 };
 
 //==============================================================================

@@ -57,22 +57,20 @@ public:
 
     void notify()
     {
-        auto* mm = MessageManager::getInstanceWithoutCreating();
+        if (MessageManager::getInstance()->isThisTheMessageThread())
+        {
+            cancelPendingUpdate();
 
-        if (mm == nullptr)
-            return;
+            const State newState;
 
-        if (! mm->isThisTheMessageThread())
+            if (std::exchange (lastNotifiedState, newState) != newState)
+                for (auto it = callbacks.begin(); it != callbacks.end();)
+                    NullCheckedInvocation::invoke ((it++)->second);
+        }
+        else
         {
             triggerAsyncUpdate();
-            return;
         }
-
-        cancelPendingUpdate();
-
-        if (auto prev = std::exchange (lastNotifiedState, State{}); prev != lastNotifiedState)
-            for (auto it = callbacks.begin(); it != callbacks.end();)
-                NullCheckedInvocation::invoke ((it++)->second);
     }
 
     static auto& get()
@@ -110,7 +108,7 @@ private:
     }
 
     std::map<MidiDeviceListConnection::Key, std::function<void()>> callbacks;
-    std::optional<State> lastNotifiedState;
+    State lastNotifiedState;
     MidiDeviceListConnection::Key key = 0;
 };
 

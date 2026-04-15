@@ -80,7 +80,7 @@ public:
 
 private:
     //==============================================================================
-    void onVBlank (double timestampSec) override;
+    void onVBlank (double timestampMs) override;
 
     //==============================================================================
     void componentParentHierarchyChanged (Component&) override;

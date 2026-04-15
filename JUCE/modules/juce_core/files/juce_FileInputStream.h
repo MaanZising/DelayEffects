@@ -89,7 +89,7 @@ public:
 private:
     //==============================================================================
     const File file;
-    detail::NativeFileHandle fileHandle{};
+    void* fileHandle = nullptr;
     int64 currentPosition = 0;
     Result status { Result::ok() };
 

@@ -75,7 +75,6 @@ JUCE_END_IGNORE_WARNINGS_GCC_LIKE
 #include <juce_audio_basics/native/juce_AudioWorkgroup_mac.h>
 #include <juce_audio_processors/format_types/juce_LegacyAudioParameter.cpp>
 #include <juce_audio_processors/format_types/juce_AU_Shared.h>
-#include <juce_gui_basics/detail/juce_ComponentPeerHelpers.h>
 
 #if JucePlugin_Enable_ARA
  #include <juce_audio_processors/utilities/ARA/juce_AudioProcessor_ARAExtensions.h>
@@ -172,12 +171,7 @@ public:
             channelInfo.add (info);
         }
        #else
-        auto channelInfoSet = AudioUnitHelpers::getAUChannelInfo (*juceFilter);
-        channelInfo.resize ((int) channelInfoSet.size());
-        std::transform (channelInfoSet.begin(),
-                        channelInfoSet.end(),
-                        channelInfo.begin(),
-                        [] (auto x) { return x.makeChannelInfo(); });
+        channelInfo = AudioUnitHelpers::getAUChannelInfo (*juceFilter);
        #endif
 
         AddPropertyListener (kAudioUnitProperty_ContextName, auPropertyListenerDispatcher, this);
@@ -746,9 +740,7 @@ public:
                         if (inDataSize != sizeof (AUMIDIEventListBlock))
                             return kAudioUnitErr_InvalidPropertyValue;
 
-                        if (@available (macos 12, *))
-                            eventListOutput.setBlock (*static_cast<const AUMIDIEventListBlock*> (inData));
-
+                        midiEventListBlock = ScopedMIDIEventListBlock::copy (*static_cast<const AUMIDIEventListBlock*> (inData));
                         return noErr;
                     }
                     break;
@@ -1693,7 +1685,7 @@ public:
         static NSView* createViewFor (AudioProcessor* filter, JuceAU* au, AudioProcessorEditor* const editor)
         {
             auto* editorCompHolder = new EditorCompHolder (editor);
-            auto r = convertToHostBounds (makeCGRect (editorCompHolder->getSizeToContainChild()));
+            auto r = convertToHostBounds (makeNSRect (editorCompHolder->getSizeToContainChild()));
 
             static JuceUIViewClass cls;
             auto* view = [[cls.createInstance() initWithFrame: r] autorelease];
@@ -1753,19 +1745,13 @@ public:
                     {
                         lastEventTime = eventTime;
 
-                        if (auto* peer = getPeer())
-                            if (detail::ComponentPeerHelpers::isInPerformKeyEquivalent (*peer))
-                                return false;
-
                         auto* view = (NSView*) getWindowHandle();
                         auto* hostView = [view superview];
+                        auto* hostWindow = [hostView window];
 
-                        [[hostView window] makeFirstResponder: hostView];
+                        [hostWindow makeFirstResponder: hostView];
                         [hostView keyDown: currentEvent];
-
-                        if ((hostView = [view superview]))
-                            if (auto* hostWindow = [hostView window])
-                                [hostWindow makeFirstResponder: view];
+                        [hostWindow makeFirstResponder: view];
                     }
                 }
             }
@@ -1778,7 +1764,7 @@ public:
             [CATransaction begin];
             [CATransaction setValue: (id) kCFBooleanTrue forKey:kCATransactionDisableActions];
 
-            auto rect = convertToHostBounds (makeCGRect (lastBounds));
+            auto rect = convertToHostBounds (makeNSRect (lastBounds));
             auto* view = (NSView*) getWindowHandle();
 
             auto superRect = [[view superview] frame];
@@ -2038,8 +2024,53 @@ private:
     AUMIDIOutputCallbackStruct midiCallback;
 
    #if JUCE_APPLE_MIDI_EVENT_LIST_SUPPORTED
-    AudioUnitHelpers::EventListOutput eventListOutput;
+    class ScopedMIDIEventListBlock
+    {
+    public:
+        ScopedMIDIEventListBlock() = default;
+
+        ScopedMIDIEventListBlock (ScopedMIDIEventListBlock&& other) noexcept
+            : midiEventListBlock (std::exchange (other.midiEventListBlock, nil)) {}
+
+        ScopedMIDIEventListBlock& operator= (ScopedMIDIEventListBlock&& other) noexcept
+        {
+            ScopedMIDIEventListBlock { std::move (other) }.swap (*this);
+            return *this;
+        }
+
+        ~ScopedMIDIEventListBlock()
+        {
+            if (midiEventListBlock != nil)
+                [midiEventListBlock release];
+        }
+
+        static ScopedMIDIEventListBlock copy (AUMIDIEventListBlock b)
+        {
+            return ScopedMIDIEventListBlock { b };
+        }
+
+        explicit operator bool() const { return midiEventListBlock != nil; }
+
+        void operator() (AUEventSampleTime eventSampleTime, uint8_t cable, const struct MIDIEventList * eventList) const
+        {
+            jassert (midiEventListBlock != nil);
+            midiEventListBlock (eventSampleTime, cable, eventList);
+        }
+
+    private:
+        void swap (ScopedMIDIEventListBlock& other) noexcept
+        {
+            std::swap (other.midiEventListBlock, midiEventListBlock);
+        }
+
+        explicit ScopedMIDIEventListBlock (AUMIDIEventListBlock b) : midiEventListBlock ([b copy]) {}
+
+        AUMIDIEventListBlock midiEventListBlock = nil;
+    };
+
+    ScopedMIDIEventListBlock midiEventListBlock;
     std::optional<SInt32> hostProtocol;
+    ump::ToUMP1Converter toUmp1Converter;
     ump::ToBytestreamDispatcher toBytestreamDispatcher { 2048 };
    #endif
 
@@ -2155,8 +2186,57 @@ private:
        #if JUCE_APPLE_MIDI_EVENT_LIST_SUPPORTED
         if (@available (macOS 12.0, iOS 15.0, *))
         {
-            if (eventListOutput.trySend (midiEvents, (int64_t) lastTimeStamp.mSampleTime))
+            if (midiEventListBlock)
+            {
+                struct MIDIEventList stackList = {};
+                MIDIEventPacket* end = nullptr;
+
+                const auto init = [&]
+                {
+                    end = MIDIEventListInit (&stackList, kMIDIProtocol_1_0);
+                };
+
+                const auto send = [&]
+                {
+                    midiEventListBlock (static_cast<int64_t> (lastTimeStamp.mSampleTime), 0, &stackList);
+                };
+
+                const auto add = [&] (const ump::View& view, int timeStamp)
+                {
+                    static_assert (sizeof (uint32_t) == sizeof (UInt32)
+                                   && alignof (uint32_t) == alignof (UInt32),
+                                   "If this fails, the cast below will be broken too!");
+                    using List = struct MIDIEventList;
+                    end = MIDIEventListAdd (&stackList,
+                                            sizeof (List::packet),
+                                            end,
+                                            (MIDITimeStamp) timeStamp,
+                                            view.size(),
+                                            reinterpret_cast<const UInt32*> (view.data()));
+                };
+
+                init();
+
+                for (const auto metadata : midiEvents)
+                {
+                    toUmp1Converter.convert (ump::BytestreamMidiView (metadata), [&] (const ump::View& view)
+                    {
+                        add (view, metadata.samplePosition);
+
+                        if (end != nullptr)
+                            return;
+
+                        send();
+                        init();
+                        add (view, metadata.samplePosition);
+                    });
+
+                }
+
+                send();
+
                 return;
+            }
         }
        #endif
 
@@ -2601,7 +2681,7 @@ private:
              && juceFilter != nullptr && GetContextName() != nullptr)
         {
             AudioProcessor::TrackProperties props;
-            props.name = std::make_optional (String::fromCFString (GetContextName()));
+            props.name = String::fromCFString (GetContextName());
 
             juceFilter->updateTrackProperties (props);
         }

@@ -201,10 +201,6 @@ public:
         ScopedContextActivator activator;
         activator.activate (context);
 
-       #if JUCE_ANDROID
-        nativeContext->notifyWillPause();
-       #endif
-
         if (context.renderer != nullptr)
             context.renderer->openGLContextClosing();
 
@@ -447,14 +443,10 @@ public:
 
         if (auto* peer = component.getPeer())
         {
-            auto& desktop = Desktop::getInstance();
-            const auto localBounds = component.getLocalBounds();
-            const auto globalArea = component.getScreenBounds() * desktop.getGlobalScaleFactor();
-
            #if JUCE_MAC
             updateScreen();
 
-            const auto displayScale = std::invoke ([this]
+            const auto displayScale = Desktop::getInstance().getGlobalScaleFactor() * [this]
             {
                 if (auto* view = getCurrentView())
                 {
@@ -466,14 +458,16 @@ public:
                 }
 
                 return areaAndScale.get().scale;
-            });
-
-            const auto newArea = globalArea.withZeroOrigin() * displayScale;
+            }();
            #else
-            const auto newArea = desktop.getDisplays()
-                                        .logicalToPhysical (globalArea)
-                                                       .withZeroOrigin();
+            const auto displayScale = Desktop::getInstance().getDisplays()
+                                                            .getDisplayForRect (component.getTopLevelComponent()
+                                                                                        ->getScreenBounds())
+                                                           ->scale;
            #endif
+
+            const auto localBounds = component.getLocalBounds();
+            const auto newArea = peer->getComponent().getLocalArea (&component, localBounds).withZeroOrigin() * displayScale;
 
             // On Windows some hosts (Pro Tools 2022.7) do not take the current DPI into account
             // when sizing plugin editor windows.
@@ -675,10 +669,6 @@ public:
 
         if (context.renderer != nullptr)
             context.renderer->newOpenGLContextCreated();
-
-       #if JUCE_ANDROID
-        nativeContext->notifyDidResume();
-       #endif
 
         return InitResult::success;
     }
@@ -1535,22 +1525,14 @@ struct DepthTestDisabler
 void OpenGLContext::copyTexture (const Rectangle<int>& targetClipArea,
                                  const Rectangle<int>& anchorPosAndTextureSize,
                                  const int contextWidth, const int contextHeight,
-                                 bool flippedVertically,
-                                 bool blend)
+                                 bool flippedVertically)
 {
     if (contextWidth <= 0 || contextHeight <= 0)
         return;
 
     JUCE_CHECK_OPENGL_ERROR
-    if (blend)
-    {
-        glBlendFunc (GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
-        glEnable (GL_BLEND);
-    }
-    else
-    {
-        glDisable (GL_BLEND);
-    }
+    glBlendFunc (GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
+    glEnable (GL_BLEND);
 
     DepthTestDisabler depthDisabler;
 
@@ -1679,19 +1661,9 @@ void OpenGLContext::copyTexture (const Rectangle<int>& targetClipArea,
     JUCE_CHECK_OPENGL_ERROR
 }
 
-void OpenGLContext::NativeContextListener::addListener (OpenGLContext& ctx, NativeContextListener& l)
-{
-    ctx.nativeContext->addListener (l);
-}
-
-void OpenGLContext::NativeContextListener::removeListener (OpenGLContext& ctx, NativeContextListener& l)
-{
-    ctx.nativeContext->removeListener (l);
-}
-
 #if JUCE_ANDROID
 
-void OpenGLContext::NativeContext::surfaceCreated (LocalRef<jobject> holder)
+void OpenGLContext::NativeContext::surfaceCreated (LocalRef<jobject>)
 {
     {
         const std::lock_guard lock { nativeHandleMutex };
@@ -1701,7 +1673,7 @@ void OpenGLContext::NativeContext::surfaceCreated (LocalRef<jobject> holder)
         // has the context already attached?
         jassert (surface.get() == EGL_NO_SURFACE && context.get() == EGL_NO_CONTEXT);
 
-        const auto window = getNativeWindowFromSurfaceHolder (holder);
+        const auto window = getNativeWindow();
 
         if (window == nullptr)
         {
@@ -1710,11 +1682,7 @@ void OpenGLContext::NativeContext::surfaceCreated (LocalRef<jobject> holder)
             return;
         }
 
-        // Reset the surface (only one window surface may be alive at a time)
-        context.reset();
-        surface.reset();
-
-        // Create the surface
+        // create the surface
         surface.reset (eglCreateWindowSurface (display, config, window.get(), nullptr));
         jassert (surface.get() != EGL_NO_SURFACE);
 

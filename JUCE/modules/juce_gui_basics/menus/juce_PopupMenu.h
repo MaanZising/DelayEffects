@@ -544,9 +544,6 @@ public:
 
             This is useful to ensure that a particular item is shown when the menu
             contains too many items to display on a single screen.
-
-            The specified item will be positioned at the target screen area of the
-            menu if possible.
         */
         [[nodiscard]] Options withItemThatMustBeVisible (int idOfItemToBeVisible) const;
 
@@ -1000,12 +997,6 @@ public:
                                                            int& idealHeight,
                                                            const Options&) = 0;
 
-        virtual void getIdealPopupMenuSectionHeaderSizeWithOptions (const String& text,
-                                                                    int standardMenuItemHeight,
-                                                                    int& idealWidth,
-                                                                    int& idealHeight,
-                                                                    const Options&) = 0;
-
         virtual int getMenuWindowFlags() = 0;
 
         virtual void drawMenuBarBackground (Graphics&, int width, int height,
@@ -1053,10 +1044,10 @@ public:
     };
 
     //==============================================================================
-    /** @cond */
+   #ifndef DOXYGEN
     [[deprecated ("Use the new method.")]]
     int drawPopupMenuItem (Graphics&, int, int, bool, bool, bool, bool, bool, const String&, const String&, Image*, const Colour*) { return 0; }
-    /** @endcond */
+   #endif
 
 private:
     //==============================================================================

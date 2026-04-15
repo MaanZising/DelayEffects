@@ -328,7 +328,8 @@ String OnlineUnlockStatus::MachineIDUtilities::getUniqueMachineID()
     return getEncodedIDString (SystemStats::getUniqueDeviceID());
 }
 
-JUCE_BEGIN_IGNORE_DEPRECATION_WARNINGS
+JUCE_BEGIN_IGNORE_WARNINGS_GCC_LIKE ("-Wdeprecated-declarations")
+JUCE_BEGIN_IGNORE_WARNINGS_MSVC (4996)
 
 StringArray OnlineUnlockStatus::MachineIDUtilities::getLocalMachineIDs()
 {
@@ -349,7 +350,8 @@ StringArray OnlineUnlockStatus::getLocalMachineIDs()
     return MachineIDUtilities::getLocalMachineIDs();
 }
 
-JUCE_END_IGNORE_DEPRECATION_WARNINGS
+JUCE_END_IGNORE_WARNINGS_GCC_LIKE
+JUCE_END_IGNORE_WARNINGS_MSVC
 
 void OnlineUnlockStatus::userCancelled()
 {

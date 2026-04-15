@@ -161,7 +161,7 @@ void TooltipWindow::displayTipInternal (Point<int> screenPos, const String& tip,
 String TooltipWindow::getTipFor (Component& c)
 {
     if (detail::WindowingHelpers::isForegroundOrEmbeddedProcess (&c)
-         && ! ModifierKeys::getCurrentModifiers().isAnyMouseButtonDown())
+         && ! ModifierKeys::currentModifiers.isAnyMouseButtonDown())
     {
         if (auto* ttc = dynamic_cast<TooltipClient*> (&c))
             if (! c.isCurrentlyBlockedByAnotherModalComponent())

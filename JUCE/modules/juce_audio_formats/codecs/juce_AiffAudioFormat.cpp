@@ -1017,20 +1017,18 @@ MemoryMappedAudioFormatReader* AiffAudioFormat::createMemoryMappedReader (FileIn
     return nullptr;
 }
 
-std::unique_ptr<AudioFormatWriter> AiffAudioFormat::createWriterFor (std::unique_ptr<OutputStream>& streamToWriteTo,
-                                                                     const AudioFormatWriterOptions& options)
+AudioFormatWriter* AiffAudioFormat::createWriterFor (OutputStream* out,
+                                                     double sampleRate,
+                                                     unsigned int numberOfChannels,
+                                                     int bitsPerSample,
+                                                     const StringPairArray& metadataValues,
+                                                     int /*qualityOptionIndex*/)
 {
-    if (streamToWriteTo == nullptr || ! getPossibleBitDepths().contains (options.getBitsPerSample()))
-        return nullptr;
+    if (out != nullptr && getPossibleBitDepths().contains (bitsPerSample))
+        return new AiffAudioFormatWriter (out, sampleRate, numberOfChannels,
+                                          (unsigned int) bitsPerSample, metadataValues);
 
-    StringPairArray metadata;
-    metadata.addUnorderedMap (options.getMetadataValues());
-
-    return std::make_unique<AiffAudioFormatWriter> (std::exchange (streamToWriteTo, {}).release(),
-                                                    options.getSampleRate(),
-                                                    (unsigned int) options.getNumChannels(),
-                                                    (unsigned int) options.getBitsPerSample(),
-                                                    metadata);
+    return nullptr;
 }
 
 } // namespace juce

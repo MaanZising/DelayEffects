@@ -42,18 +42,22 @@ public:
     using ValuePtr = detail::qjs::QuickJSContext::ValuePtr;
 
     //==============================================================================
-    explicit Impl (const RelativeTime* maximumExecutionTimeIn)
-        : engine (std::make_unique<detail::QuickJSWrapper> (maximumExecutionTimeIn))
+    Impl()
     {
-        detail::DynamicObjectWrapper::createClass (engine->getQuickJSRuntime());
+        detail::DynamicObjectWrapper::createClass (engine.getQuickJSRuntime());
+
+        engine.setInterruptHandler ([this]
+        {
+            return (int64) Time::getMillisecondCounterHiRes() >= timeout;
+        });
     }
 
     void registerNativeObject (const Identifier& name,
                                DynamicObject::Ptr dynamicObject,
                                std::optional<detail::qjs::JSValue> parent = std::nullopt)
     {
-        auto wrapper  = std::make_unique<detail::DynamicObjectWrapper> (*engine, dynamicObject);
-        auto* ctx     = engine->getQuickJSContext();
+        auto wrapper  = std::make_unique<detail::DynamicObjectWrapper> (engine, dynamicObject);
+        auto* ctx     = engine.getQuickJSContext();
         auto jsObject = JS_NewObjectClass (ctx, (int) detail::DynamicObjectWrapper::getClassId());
         detail::qjs::JS_SetOpaque (jsObject, (void*) wrapper.get());
 
@@ -113,19 +117,14 @@ public:
         wrapper.release();
     }
 
-    var evaluate (const String& code, Result* errorMessage)
+    var evaluate (const String& code, Result* errorMessage, RelativeTime maxExecTime)
     {
-        engine->resetTimeout();
+        resetTimeout (maxExecTime);
 
         if (errorMessage != nullptr)
             *errorMessage = Result::ok();
 
-        const auto result = detail::quickJSToJuce ({ JS_Eval (engine->getQuickJSContext(),
-                                                              code.toRawUTF8(),
-                                                              code.getNumBytesAsUTF8(),
-                                                              "",
-                                                              JS_EVAL_TYPE_GLOBAL),
-                                                     engine->getQuickJSContext() });
+        const auto result = detail::quickJSToJuce ({ JS_Eval (engine.getQuickJSContext(), code.toRawUTF8(), code.getNumBytesAsUTF8(), "", JS_EVAL_TYPE_GLOBAL), engine.getQuickJSContext() });
 
         if (auto* v = std::get_if<var> (&result))
             return *v;
@@ -137,20 +136,21 @@ public:
         return var::undefined();
     }
 
-    Result execute (const String& code)
+    Result execute (const String& code, RelativeTime maxExecTime)
     {
         auto result = Result::ok();
-        evaluate (code, &result);
+        evaluate (code, &result, maxExecTime);
         return result;
     }
 
     var callFunction (const Identifier& function,
                       const var::NativeFunctionArgs& args,
-                      Result* errorMessage)
+                      Result* errorMessage,
+                      RelativeTime maxExecTime)
     {
-        engine->resetTimeout();
+        resetTimeout (maxExecTime);
 
-        auto* ctx = engine->getQuickJSContext();
+        auto* ctx = engine.getQuickJSContext();
         const auto functionStr = function.toString();
 
         const auto fn = detail::qjs::JS_NewAtomLen (ctx, functionStr.toRawUTF8(), functionStr.getNumBytesAsUTF8());
@@ -179,22 +179,29 @@ public:
 
     void stop() noexcept
     {
-        engine->stop();
+        timeout = (int64) Time::getMillisecondCounterHiRes();
     }
 
     JSObject getRootObject() const
     {
-        return JSObject { engine.get() };
+        return JSObject { &engine };
     }
 
 private:
-    std::unique_ptr<detail::QuickJSWrapper> engine;
+    //==============================================================================
+    void resetTimeout (RelativeTime maxExecTime)
+    {
+        timeout = (int64) Time::getMillisecondCounterHiRes() + maxExecTime.inMilliseconds();
+    }
+
+    detail::QuickJSWrapper engine;
+    std::atomic<int64> timeout{};
 };
 
 //==============================================================================
 JavascriptEngine::JavascriptEngine()
     : maximumExecutionTime (15.0),
-      impl (std::make_unique<Impl> (&maximumExecutionTime))
+      impl (std::make_unique<Impl>())
 {
 }
 
@@ -207,19 +214,19 @@ void JavascriptEngine::registerNativeObject (const Identifier& name, DynamicObje
 
 Result JavascriptEngine::execute (const String& javascriptCode)
 {
-    return impl->execute (javascriptCode);
+    return impl->execute (javascriptCode, maximumExecutionTime);
 }
 
 var JavascriptEngine::evaluate (const String& javascriptCode, Result* errorMessage)
 {
-    return impl->evaluate (javascriptCode, errorMessage);
+    return impl->evaluate (javascriptCode, errorMessage, maximumExecutionTime);
 }
 
 var JavascriptEngine::callFunction (const Identifier& function,
                                     const var::NativeFunctionArgs& args,
                                     Result* errorMessage)
 {
-    return impl->callFunction (function, args, errorMessage);
+    return impl->callFunction (function, args, errorMessage, maximumExecutionTime);
 }
 
 void JavascriptEngine::stop() noexcept

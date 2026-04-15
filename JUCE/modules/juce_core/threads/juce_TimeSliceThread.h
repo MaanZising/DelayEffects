@@ -147,9 +147,9 @@ public:
     bool contains (const TimeSliceClient*) const;
 
     //==============================================================================
-    /** @cond */
+   #ifndef DOXYGEN
     void run() override;
-    /** @endcond */
+   #endif
 
     //==============================================================================
 private:

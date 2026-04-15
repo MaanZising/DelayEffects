@@ -3190,7 +3190,6 @@ private:
             Inner() : XEmbedComponent (true, true)
             {
                 setOpaque (true);
-                setVisible (true);
                 addToDesktop (0);
             }
         };

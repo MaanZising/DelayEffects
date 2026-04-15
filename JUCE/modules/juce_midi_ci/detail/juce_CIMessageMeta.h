@@ -181,7 +181,8 @@ struct Meta<Message::ProcessEndMidiMessageReport> : Metadata<0x44> {};
 
 } // namespace juce::midi_ci::detail::MessageMeta
 
-/** @cond */
+#ifndef DOXYGEN
+
 namespace juce
 {
 
@@ -627,4 +628,5 @@ struct SerialisationTraits<ci::Message::ProcessEndMidiMessageReport> : VersionBa
 };
 
 } // namespace juce
-/** @endcond */
+
+#endif  // ifndef DOXYGEN

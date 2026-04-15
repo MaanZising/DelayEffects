@@ -44,10 +44,11 @@ namespace juce
 namespace OggVorbisNamespace
 {
 #if JUCE_INCLUDE_OGGVORBIS_CODE || ! defined (JUCE_INCLUDE_OGGVORBIS_CODE)
- JUCE_BEGIN_IGNORE_WARNINGS_MSVC (4267 4127 4244 4100 4701 4702 4013 4133 4206 4305 4189 4706 4995 4365 4456 4457 4459 6297 6011 6001 6308 6255 6386 6385 6246 6387 6263 6262 28182)
+ JUCE_BEGIN_IGNORE_WARNINGS_MSVC (4267 4127 4244 4996 4100 4701 4702 4013 4133 4206 4305 4189 4706 4995 4365 4456 4457 4459 6297 6011 6001 6308 6255 6386 6385 6246 6387 6263 6262 28182)
 
  JUCE_BEGIN_IGNORE_WARNINGS_GCC_LIKE ("-Wcast-align",
                                       "-Wconversion",
+                                      "-Wdeprecated-declarations",
                                       "-Wdeprecated-register",
                                       "-Wfloat-conversion",
                                       "-Wfloat-equal",
@@ -60,9 +61,6 @@ namespace OggVorbisNamespace
                                       "-Wswitch-default",
                                       "-Wswitch-enum",
                                       "-Wzero-as-null-pointer-constant")
-
- JUCE_BEGIN_IGNORE_DEPRECATION_WARNINGS
-
  JUCE_BEGIN_NO_SANITIZE ("undefined")
 
  #include "oggvorbis/vorbisenc.h"
@@ -94,7 +92,6 @@ namespace OggVorbisNamespace
  #include "oggvorbis/libvorbis-1.3.7/lib/window.c"
 
  JUCE_END_NO_SANITIZE
- JUCE_END_IGNORE_DEPRECATION_WARNINGS
  JUCE_END_IGNORE_WARNINGS_MSVC
  JUCE_END_IGNORE_WARNINGS_GCC_LIKE
 #else
@@ -463,26 +460,21 @@ AudioFormatReader* OggVorbisAudioFormat::createReaderFor (InputStream* in, bool 
     return nullptr;
 }
 
-std::unique_ptr<AudioFormatWriter> OggVorbisAudioFormat::createWriterFor (std::unique_ptr<OutputStream>& streamToWriteTo,
-                                                                          const AudioFormatWriterOptions& options)
+AudioFormatWriter* OggVorbisAudioFormat::createWriterFor (OutputStream* out,
+                                                          double sampleRate,
+                                                          unsigned int numChannels,
+                                                          int bitsPerSample,
+                                                          const StringPairArray& metadataValues,
+                                                          int qualityOptionIndex)
 {
-    if (streamToWriteTo == nullptr)
+    if (out == nullptr)
         return nullptr;
 
-    StringPairArray metadata;
-    metadata.addUnorderedMap (options.getMetadataValues());
+    std::unique_ptr<OggWriter> w (new OggWriter (out, sampleRate, numChannels,
+                                                 (unsigned int) bitsPerSample,
+                                                 qualityOptionIndex, metadataValues));
 
-    auto w = std::make_unique<OggWriter> (std::exchange (streamToWriteTo, {}).release(),
-                                          options.getSampleRate(),
-                                          (unsigned int) options.getNumChannels(),
-                                          (unsigned int) options.getBitsPerSample(),
-                                          options.getQualityOptionIndex(),
-                                          metadata);
-
-    if (! w->ok)
-        return nullptr;
-
-    return w;
+    return w->ok ? w.release() : nullptr;
 }
 
 StringArray OggVorbisAudioFormat::getQualityOptions()

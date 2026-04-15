@@ -325,7 +325,7 @@ void DynamicLibrary::close()
 
 void* DynamicLibrary::getFunction (const String& functionName) noexcept
 {
-    return handle != nullptr ? (void*) GetProcAddress ((HMODULE) handle, functionName.toUTF8())
+    return handle != nullptr ? (void*) GetProcAddress ((HMODULE) handle, functionName.toUTF8()) // (void* cast is required for mingw)
                              : nullptr;
 }
 

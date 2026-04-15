@@ -207,12 +207,6 @@ public:
                                                int& idealHeight,
                                                const PopupMenu::Options&) override;
 
-    void getIdealPopupMenuSectionHeaderSizeWithOptions (const String& text,
-                                                        int standardMenuItemHeight,
-                                                        int& idealWidth,
-                                                        int& idealHeight,
-                                                        const PopupMenu::Options&) override;
-
     int getMenuWindowFlags() override;
     void preparePopupMenuWindow (Component&) override;
 

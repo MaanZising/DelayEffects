@@ -34,51 +34,41 @@
 
 package com.rmsl.juce;
 
-import static android.view.WindowInsetsController.APPEARANCE_LIGHT_CAPTION_BARS;
-import static android.view.WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS;
-import static android.view.WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS;
-import static android.view.WindowInsetsController.BEHAVIOR_DEFAULT;
-import static android.view.WindowInsetsController.BEHAVIOR_SHOW_BARS_BY_SWIPE;
-import static android.view.WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE;
-
 import android.app.Activity;
 import android.app.Application;
 import android.content.Context;
 import android.graphics.Canvas;
-import android.graphics.Color;
 import android.graphics.ColorMatrix;
 import android.graphics.ColorMatrixColorFilter;
 import android.graphics.Paint;
 import android.graphics.Point;
 import android.graphics.Rect;
 import android.os.Build;
-import android.os.Bundle;
-import android.text.Editable;
-import android.text.InputType;
 import android.text.Selection;
 import android.text.SpanWatcher;
 import android.text.Spannable;
-import android.text.SpannableStringBuilder;
 import android.text.Spanned;
 import android.text.TextWatcher;
 import android.util.Pair;
+import android.os.Bundle;
+import android.text.Editable;
+import android.text.InputType;
+import android.text.SpannableStringBuilder;
 import android.view.Choreographer;
 import android.view.KeyEvent;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.ViewTreeObserver;
-import android.view.Window;
-import android.view.WindowInsets;
-import android.view.WindowInsetsController;
-import android.view.accessibility.AccessibilityManager;
-import android.view.accessibility.AccessibilityNodeInfo;
 import android.view.accessibility.AccessibilityNodeProvider;
+import android.view.accessibility.AccessibilityNodeInfo;
+import android.view.accessibility.AccessibilityManager;
 import android.view.inputmethod.BaseInputConnection;
 import android.view.inputmethod.EditorInfo;
 import android.view.inputmethod.InputConnection;
 import android.view.inputmethod.InputMethodManager;
 
+import java.lang.reflect.Method;
 import java.util.ArrayList;
 
 import java.util.List;
@@ -90,7 +80,7 @@ public final class ComponentPeerView extends ViewGroup
     {
         super (context);
 
-        if (context instanceof Application)
+        if (Application.class.isInstance (context))
         {
             ((Application) context).registerActivityLifecycleCallbacks (this);
         }
@@ -118,7 +108,36 @@ public final class ComponentPeerView extends ViewGroup
         colorMatrix.set (colorTransform);
         paint.setColorFilter (new ColorMatrixColorFilter (colorMatrix));
 
-        setLayerType (LAYER_TYPE_NONE, null);
+        java.lang.reflect.Method method = null;
+
+        try
+        {
+            method = getClass().getMethod ("setLayerType", int.class, Paint.class);
+        }
+        catch (SecurityException e)
+        {
+        }
+        catch (NoSuchMethodException e)
+        {
+        }
+
+        if (method != null)
+        {
+            try
+            {
+                int layerTypeNone = 0;
+                method.invoke (this, layerTypeNone, null);
+            }
+            catch (java.lang.IllegalArgumentException e)
+            {
+            }
+            catch (java.lang.IllegalAccessException e)
+            {
+            }
+            catch (java.lang.reflect.InvocationTargetException e)
+            {
+            }
+        }
 
         Choreographer.getInstance().postFrameCallback (this);
     }
@@ -164,51 +183,10 @@ public final class ComponentPeerView extends ViewGroup
     private final Paint paint = new Paint();
 
     //==============================================================================
-    private static native void handleMouseDown (long host, int index, float x, float y, long time);
-    private static native void handleMouseDrag (long host, int index, float x, float y, long time);
-    private static native void handleMouseUp (long host, int index, float x, float y, long time);
-    private static native void handleAccessibilityHover (long host, int action, float x, float y, long time);
-
-    @FunctionalInterface
-    private interface MouseHandler
-    {
-        void handle (long host, int index, float x, float y, long time);
-    }
-
-    void handleMultiPointerEvent (MotionEvent event, MouseHandler callback)
-    {
-        long time = event.getEventTime();
-        callback.handle (host, event.getPointerId (0), event.getRawX(), event.getRawY(), time);
-
-        int n = event.getPointerCount();
-
-        if (n > 1)
-        {
-            int point[] = new int[2];
-            getLocationOnScreen (point);
-
-            for (int i = 1; i < n; ++i)
-                callback.handle (host, event.getPointerId (i), event.getX (i) + point[0], event.getY (i) + point[1], time);
-        }
-    }
-
-    void handleSecondaryPointerEvent (MotionEvent event, MouseHandler callback)
-    {
-        long time = event.getEventTime();
-        int i = event.getActionIndex();
-
-        if (i == 0)
-        {
-            callback.handle (host, event.getPointerId (0), event.getRawX(), event.getRawY(), time);
-        }
-        else
-        {
-            int point[] = new int[2];
-            getLocationOnScreen (point);
-
-            callback.handle (host, event.getPointerId (i), event.getX (i) + point[0], event.getY (i) + point[1], time);
-        }
-    }
+    private native void handleMouseDown (long host, int index, float x, float y, long time);
+    private native void handleMouseDrag (long host, int index, float x, float y, long time);
+    private native void handleMouseUp (long host, int index, float x, float y, long time);
+    private native void handleAccessibilityHover (long host, int action, float x, float y, long time);
 
     @Override
     public boolean onTouchEvent (MotionEvent event)
@@ -225,25 +203,64 @@ public final class ComponentPeerView extends ViewGroup
                 handleMouseDown (host, event.getPointerId (0), event.getRawX(), event.getRawY(), time);
                 return true;
 
+            case MotionEvent.ACTION_CANCEL:
             case MotionEvent.ACTION_UP:
                 handleMouseUp (host, event.getPointerId (0), event.getRawX(), event.getRawY(), time);
                 return true;
 
-            case MotionEvent.ACTION_CANCEL:
-                handleMultiPointerEvent (event, ComponentPeerView::handleMouseUp);
-                return true;
-
             case MotionEvent.ACTION_MOVE:
-                handleMultiPointerEvent (event, ComponentPeerView::handleMouseDrag);
+            {
+                handleMouseDrag (host, event.getPointerId (0), event.getRawX(), event.getRawY(), time);
+
+                int n = event.getPointerCount();
+
+                if (n > 1)
+                {
+                    int point[] = new int[2];
+                    getLocationOnScreen (point);
+
+                    for (int i = 1; i < n; ++i)
+                        handleMouseDrag (host, event.getPointerId (i), event.getX (i) + point[0], event.getY (i) + point[1], time);
+                }
+
                 return true;
+            }
 
             case MotionEvent.ACTION_POINTER_UP:
-                handleSecondaryPointerEvent (event, ComponentPeerView::handleMouseUp);
+            {
+                int i = (action & MotionEvent.ACTION_POINTER_INDEX_MASK) >> MotionEvent.ACTION_POINTER_INDEX_SHIFT;
+
+                if (i == 0)
+                {
+                    handleMouseUp (host, event.getPointerId (0), event.getRawX(), event.getRawY(), time);
+                }
+                else
+                {
+                    int point[] = new int[2];
+                    getLocationOnScreen (point);
+
+                    handleMouseUp (host, event.getPointerId (i), event.getX (i) + point[0], event.getY (i) + point[1], time);
+                }
                 return true;
+            }
 
             case MotionEvent.ACTION_POINTER_DOWN:
-                handleSecondaryPointerEvent (event, ComponentPeerView::handleMouseDown);
+            {
+                int i = (action & MotionEvent.ACTION_POINTER_INDEX_MASK) >> MotionEvent.ACTION_POINTER_INDEX_SHIFT;
+
+                if (i == 0)
+                {
+                    handleMouseDown (host, event.getPointerId (0), event.getRawX(), event.getRawY(), time);
+                }
+                else
+                {
+                    int point[] = new int[2];
+                    getLocationOnScreen (point);
+
+                    handleMouseDown (host, event.getPointerId (i), event.getX (i) + point[0], event.getY (i) + point[1], time);
+                }
                 return true;
+            }
 
             default:
                 break;
@@ -779,69 +796,35 @@ public final class ComponentPeerView extends ViewGroup
     {
     }
 
-    public void setSystemUiVisibilityCompat (Window window, boolean visible, boolean isLight)
+    public void setSystemUiVisibilityCompat (int visibility)
     {
-        if (window != null)
+        Method systemUIVisibilityMethod = null;
+        try
         {
-            // Although this is deprecated in Android 35+, it still seems to be necessary
-            // to adjust the colour of the nav bar icons when in button-mode.
-            window.setNavigationBarColor (isLight ? Color.BLACK : Color.WHITE);
+            systemUIVisibilityMethod = this.getClass().getMethod ("setSystemUiVisibility", int.class);
         }
-
-        if (30 <= Build.VERSION.SDK_INT)
+        catch (SecurityException e)
         {
-            WindowInsetsController controller = getWindowInsetsController();
-
-            if (controller != null)
-            {
-                final int mask = (35 <= Build.VERSION.SDK_INT ? APPEARANCE_LIGHT_CAPTION_BARS : 0)
-                               | APPEARANCE_LIGHT_NAVIGATION_BARS
-                               | APPEARANCE_LIGHT_STATUS_BARS;
-                controller.setSystemBarsAppearance (isLight ? mask : 0, mask);
-
-                if (visible)
-                {
-                    controller.show (WindowInsets.Type.systemBars());
-                    controller.setSystemBarsBehavior (31 <= Build.VERSION.SDK_INT ? BEHAVIOR_DEFAULT
-                                                                                  : BEHAVIOR_SHOW_BARS_BY_SWIPE);
-                }
-                else
-                {
-                    controller.hide (WindowInsets.Type.systemBars());
-                    controller.setSystemBarsBehavior (BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE);
-                }
-
-                return;
-            }
-        }
-
-        if (window == null)
             return;
-
-        // Displays::findDisplays queries the DecorView to determine the
-        // most recently-requested visibility state of the system UI.
-        // As we're creating new top-level views via WindowManager,
-        // updating only the DecorView isn't sufficient to hide the global
-        // system UI; we also need to update the view that was added to
-        // the WindowManager.
-        ArrayList<View> views = new ArrayList<>();
-        views.add (window.getDecorView());
-        views.add (this);
-
-        for (View view : views)
+        }
+        catch (NoSuchMethodException e)
         {
-            final int lightStyle = (26 <= Build.VERSION.SDK_INT ? SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR : 0)
-                                 | SYSTEM_UI_FLAG_LIGHT_STATUS_BAR;
-            final int prevFlags = view.getSystemUiVisibility();
-            final int fullScreenFlags = SYSTEM_UI_FLAG_HIDE_NAVIGATION
-                                      | SYSTEM_UI_FLAG_FULLSCREEN
-                                      | SYSTEM_UI_FLAG_IMMERSIVE_STICKY;
-            final int withVisibility = visible ? (prevFlags & ~fullScreenFlags)
-                                               : (prevFlags |  fullScreenFlags);
-            final int withColour = isLight ? (withVisibility |  lightStyle)
-                                           : (withVisibility & ~lightStyle);
+            return;
+        }
+        if (systemUIVisibilityMethod == null) return;
 
-            view.setSystemUiVisibility (withColour);
+        try
+        {
+            systemUIVisibilityMethod.invoke (this, visibility);
+        }
+        catch (java.lang.IllegalArgumentException e)
+        {
+        }
+        catch (java.lang.IllegalAccessException e)
+        {
+        }
+        catch (java.lang.reflect.InvocationTargetException e)
+        {
         }
     }
 

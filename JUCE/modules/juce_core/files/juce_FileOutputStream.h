@@ -93,12 +93,12 @@ public:
     const Result& getStatus() const noexcept            { return status; }
 
     /** Returns true if the stream couldn't be opened for some reason.
-        @see getStatus()
+        @see getResult()
     */
     bool failedToOpen() const noexcept                  { return status.failed(); }
 
     /** Returns true if the stream opened without problems.
-        @see getStatus()
+        @see getResult()
     */
     bool openedOk() const noexcept                      { return status.wasOk(); }
 
@@ -119,7 +119,7 @@ public:
 private:
     //==============================================================================
     File file;
-    detail::NativeFileHandle fileHandle{};
+    void* fileHandle = nullptr;
     Result status { Result::ok() };
     int64 currentPosition = 0;
     size_t bufferSize, bytesInBuffer = 0;

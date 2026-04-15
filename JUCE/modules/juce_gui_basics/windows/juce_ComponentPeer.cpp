@@ -189,7 +189,7 @@ Component* ComponentPeer::getTargetForKeyPress()
 bool ComponentPeer::handleKeyPress (const int keyCode, const juce_wchar textCharacter)
 {
     return handleKeyPress (KeyPress (keyCode,
-                                     ModifierKeys::getCurrentModifiers().withoutMouseButtons(),
+                                     ModifierKeys::currentModifiers.withoutMouseButtons(),
                                      textCharacter));
 }
 

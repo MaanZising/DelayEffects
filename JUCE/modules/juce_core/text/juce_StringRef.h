@@ -141,12 +141,10 @@ public:
     /** The text that is referenced. */
     String::CharPointerType text;
 
-    #if JUCE_STRING_UTF_TYPE != 8
-     /** @cond */
+    #if JUCE_STRING_UTF_TYPE != 8 && ! defined (DOXYGEN)
      // Sorry, non-UTF8 people, you're unable to take advantage of StringRef, because
      // you've chosen a character encoding that doesn't match C++ string literals.
      String stringCopy;
-     /** @endcond */
     #endif
 };
 

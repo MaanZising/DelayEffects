@@ -35,29 +35,15 @@
 namespace juce
 {
 
-static String portableTrim (String toTrim)
+static constexpr bool isNonBreakingSpace (const juce_wchar c)
 {
-    if (toTrim.isEmpty())
-        return toTrim;
-
-    const auto b = toTrim.begin();
-    const auto e = toTrim.end();
-
-    const auto shouldTrim = [] (auto ptr)
-    {
-        return SBCodepointGetBidiType ((SBCodepoint) *ptr) == SBBidiTypeWS;
-    };
-
-    const auto trimmedBegin = CharacterFunctions::trimBegin (b, e, shouldTrim);
-    const auto trimmedEnd = CharacterFunctions::trimEnd (trimmedBegin, e, shouldTrim);
-
-    if (trimmedBegin == b && trimmedEnd == e)
-        return toTrim;
-
-    return String (trimmedBegin, trimmedEnd);
+    return c == 0x00a0
+        || c == 0x2007
+        || c == 0x202f
+        || c == 0x2060;
 }
 
-static bool areAllRequiredWidthsSmallerThanMax (const detail::ShapedText& shapedText, float width)
+static bool areAllRequiredWidthsSmallerThanMax (const ShapedText& shapedText, float width)
 {
     const auto lineWidths = shapedText.getMinimumRequiredWidthForLines();
     return std::all_of (lineWidths.begin(), lineWidths.end(), [width] (auto& w) { return w <= width; });
@@ -65,7 +51,7 @@ static bool areAllRequiredWidthsSmallerThanMax (const detail::ShapedText& shaped
 
 // ShapedText truncates the last line by default, even if it requires larger width than the maximum
 // allowed.
-static bool areAllRequiredWidthsExceptTheLastSmallerThanMax (const detail::ShapedText& shapedText, float width)
+static bool areAllRequiredWidthsExceptTheLastSmallerThanMax (const ShapedText& shapedText, float width)
 {
     const auto lineWidths = shapedText.getMinimumRequiredWidthForLines();
 
@@ -185,53 +171,36 @@ void GlyphArrangement::addLineOfText (const Font& font, const String& text, floa
     addCurtailedLineOfText (font, text, xOffset, yOffset, 1.0e10f, false);
 }
 
-static void addGlyphsFromShapedText (GlyphArrangement& ga, const detail::ShapedText& st, float x, float y)
+static void addGlyphsFromShapedText (GlyphArrangement& ga, const ShapedText& st, float x, float y)
 {
-    st.accessTogetherWith ([&] (auto shapedGlyphs, auto positions, auto font, auto glyphRange, auto)
-    {
-        for (auto it = shapedGlyphs.begin(); it != shapedGlyphs.end();)
-        {
-            const auto& glyph = *it;
-            const auto isNotPlaceholder = [] (auto& shapedGlyph)
-            {
-                return ! shapedGlyph.isPlaceholderForLigature();
-            };
+    st.access ([&] (auto shapedGlyphs, auto positions, auto font, auto glyphRange, auto)
+               {
+                   for (size_t i = 0; i < shapedGlyphs.size(); ++i)
+                   {
+                       const auto glyphIndex = (int64) i + glyphRange.getStart();
 
-            const auto next = std::find_if (std::next (it),
-                                            shapedGlyphs.end(),
-                                            isNotPlaceholder);
+                       auto& glyph = shapedGlyphs[i];
+                       auto& position = positions[i];
 
-            const auto addWidth = [] (auto acc, auto& shapedGlyph)
-            {
-                return acc + shapedGlyph.advance.x;
-            };
+                       PositionedGlyph pg { font,
+                                            st.getText()[(int) st.getTextRange (glyphIndex).getStart()],
+                                            (int) glyph.glyphId,
+                                            position.getX() + x,
+                                            position.getY() + y,
+                                            glyph.advance.getX(),
+                                            glyph.whitespace };
 
-            const auto width = std::accumulate (it, next, 0.0f, addWidth);
-            const auto index = (size_t) std::distance (shapedGlyphs.begin(), it);
-            const auto position = positions[index];
-            const auto glyphIndex = (int64) index + glyphRange.getStart();
-
-            ga.addGlyph ({ font,
-                           st.getText()[(int) st.getTextRange (glyphIndex).getStart()],
-                           (int) glyph.glyphId,
-                           position.getX() + x,
-                           position.getY() + y,
-                           width,
-                           glyph.isWhitespace() });
-
-            it = next;
-        }
-    });
+                       ga.addGlyph (std::move (pg));
+                   }
+               });
 }
 
 void GlyphArrangement::addCurtailedLineOfText (const Font& font, const String& text,
                                                float xOffset, float yOffset,
                                                float maxWidthPixels, bool useEllipsis)
 {
-    using namespace detail;
-
     auto options = ShapedText::Options{}.withMaxNumLines (1)
-                                        .withWordWrapWidth (maxWidthPixels)
+                                        .withMaxWidth (maxWidthPixels)
                                         .withFont (font)
                                         .withBaselineAtZero()
                                         .withTrailingWhitespacesShouldFit (false);
@@ -249,12 +218,10 @@ void GlyphArrangement::addJustifiedText (const Font& font, const String& text,
                                          Justification horizontalLayout,
                                          float leading)
 {
-    using namespace detail;
-
-    ShapedText st { text, ShapedText::Options{}.withWordWrapWidth (maxLineWidth)
+    ShapedText st { text, ShapedText::Options{}.withMaxWidth (maxLineWidth)
                                                .withJustification (horizontalLayout)
                                                .withFont (font)
-                                               .withAdditiveLineSpacing (leading)
+                                               .withLeading (1.0f + leading / font.getHeight())
                                                .withBaselineAtZero()
                                                .withTrailingWhitespacesShouldFit (false) };
 
@@ -268,10 +235,8 @@ static auto createFittedText (const Font& f,
                               Justification layout,
                               int maximumLines,
                               float minimumRelativeHorizontalScale,
-                              detail::ShapedText::Options baseOptions)
+                              ShapedText::Options baseOptions = {})
 {
-    using namespace detail;
-
     if (! layout.testFlags (Justification::bottom | Justification::top))
         layout = layout.getOnlyHorizontalFlags() | Justification::verticallyCentred;
 
@@ -285,7 +250,7 @@ static auto createFittedText (const Font& f,
     {
         ShapedText st { text,
                         baseOptions
-                            .withWordWrapWidth (width)
+                            .withMaxWidth (width)
                             .withHeight (height)
                             .withJustification (layout)
                             .withFont (f)
@@ -294,14 +259,14 @@ static auto createFittedText (const Font& f,
         return st;
     }
 
-    const auto trimmed = portableTrim (text);
+    const auto trimmed = text.trim();
 
     constexpr auto widthFittingTolerance = 0.01f;
 
     // First attempt: try to squash the entire text on a single line
     {
         ShapedText st { trimmed, baseOptions.withFont (f)
-                                            .withWordWrapWidth (width)
+                                            .withMaxWidth (width)
                                             .withHeight (height)
                                             .withMaxNumLines (1)
                                             .withJustification (layout)
@@ -320,7 +285,7 @@ static auto createFittedText (const Font& f,
             ShapedText squashed { trimmed,
                                   baseOptions
                                       .withFont (f.withHorizontalScale (f.getHorizontalScale() * requiredRelativeScale))
-                                      .withWordWrapWidth (width)
+                                      .withMaxWidth (width)
                                       .withHeight (height)
                                       .withJustification (layout)
                                       .withTrailingWhitespacesShouldFit (false)};
@@ -336,7 +301,7 @@ static auto createFittedText (const Font& f,
         ShapedText squashed { trimmed,
                               baseOptions
                                   .withFont (f.withHorizontalScale (minimumHorizontalScale))
-                                  .withWordWrapWidth (width)
+                                  .withMaxWidth (width)
                                   .withHeight (height)
                                   .withJustification (layout)
                                   .withMaxNumLines (1)
@@ -362,10 +327,7 @@ static auto createFittedText (const Font& f,
     while (numLines < maximumLines)
     {
         ++numLines;
-
-        const auto a = baseOptions.getAdditiveLineSpacing();
-        auto newFontHeight = ((height + a) / (float) numLines - a)
-                             / baseOptions.getLeading();
+        auto newFontHeight = height / (float) numLines;
 
         if (newFontHeight < font.getHeight())
             font.setHeight (jmax (8.0f, newFontHeight));
@@ -373,7 +335,7 @@ static auto createFittedText (const Font& f,
         ShapedText squashed { trimmed,
                               baseOptions
                                   .withFont (font)
-                                  .withWordWrapWidth (width)
+                                  .withMaxWidth (width)
                                   .withHeight (height)
                                   .withMaxNumLines (numLines)
                                   .withJustification (layout)
@@ -402,7 +364,7 @@ static auto createFittedText (const Font& f,
         return ShapedText { trimmed,
                             baseOptions
                                 .withFont (font.withHorizontalScale (horizontalScale))
-                                .withWordWrapWidth (width)
+                                .withMaxWidth (width)
                                 .withHeight (height)
                                 .withMaxNumLines (numLines)
                                 .withJustification (layout)
@@ -480,13 +442,6 @@ static auto createFittedText (const Font& f,
     return candidate.shapedText;
 }
 
-static detail::ShapedText::Options withGlyphArrangementOptions (const detail::ShapedText::Options& opts,
-                                                                const GlyphArrangementOptions& gaOpts)
-{
-    return opts.withAdditiveLineSpacing (gaOpts.getLineSpacing())
-               .withLeading (gaOpts.getLineHeightMultiple());
-}
-
 void GlyphArrangement::addFittedText (const Font& f,
                                       const String& text,
                                       float x,
@@ -495,19 +450,9 @@ void GlyphArrangement::addFittedText (const Font& f,
                                       float height,
                                       Justification layout,
                                       int maximumLines,
-                                      float minimumHorizontalScale,
-                                      GlyphArrangementOptions options)
+                                      float minimumHorizontalScale)
 {
-    using namespace detail;
-
-    const auto st = createFittedText (f,
-                                      text,
-                                      width,
-                                      height,
-                                      layout,
-                                      maximumLines,
-                                      minimumHorizontalScale,
-                                      withGlyphArrangementOptions (ShapedText::Options{}, options));
+    const auto st = createFittedText (f, text, width, height, layout, maximumLines, minimumHorizontalScale);
 
     // ShapedText has the feature for visually truncating the last line, and createFittedText() uses
     // it. Hence if it's only the last line that requires a larger width, ShapedText will take care
@@ -527,8 +472,7 @@ void GlyphArrangement::addFittedText (const Font& f,
                                                     layout,
                                                     maximumLines,
                                                     minimumHorizontalScale,
-                                                    withGlyphArrangementOptions (ShapedText::Options{}.withAllowBreakingInsideWord(),
-                                                                                 options));
+                                                    ShapedText::Options{}.withAllowBreakingInsideWord());
 
     addGlyphsFromShapedText (*this, stWithWordBreaks, x, y);
 }

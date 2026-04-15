@@ -465,26 +465,29 @@ public:
 
         client = createClient();
 
-        if (client == nullptr || ! tryInitialisingWithBufferSize (bufferSizeSamples))
-            return false;
+        if (client != nullptr
+             && tryInitialisingWithBufferSize (bufferSizeSamples))
+        {
+            sampleRateHasChanged = false;
+            shouldShutdown = false;
 
-        sampleRateHasChanged = false;
-        shouldShutdown = false;
+            channelMaps.clear();
 
-        channelMaps.clear();
+            for (int i = 0; i <= channels.getHighestBit(); ++i)
+                if (channels[i])
+                    channelMaps.add (i);
 
-        for (int i = 0; i <= channels.getHighestBit(); ++i)
-            if (channels[i])
-                channelMaps.add (i);
+            REFERENCE_TIME latency;
 
-        REFERENCE_TIME latency;
+            if (check (client->GetStreamLatency (&latency)))
+                latencySamples = refTimeToSamples (latency, sampleRate);
 
-        if (check (client->GetStreamLatency (&latency)))
-            latencySamples = refTimeToSamples (latency, sampleRate);
+            (void) check (client->GetBufferSize (&actualBufferSize));
+            createSessionEventCallback();
+            return check (client->SetEventHandle (clientEvent));
+        }
 
-        (void) check (client->GetBufferSize (&actualBufferSize));
-        createSessionEventCallback();
-        return check (client->SetEventHandle (clientEvent));
+        return false;
     }
 
     void closeClient()
@@ -603,11 +606,11 @@ private:
         client->GetService (__uuidof (IAudioSessionControl),
                             (void**) audioSessionControl.resetAndGetPointerAddress());
 
-        if (audioSessionControl == nullptr)
-            return;
-
-        sessionEventCallback = becomeComSmartPtrOwner (new SessionEventCallback (*this));
-        audioSessionControl->RegisterAudioSessionNotification (sessionEventCallback);
+        if (audioSessionControl != nullptr)
+        {
+            sessionEventCallback = becomeComSmartPtrOwner (new SessionEventCallback (*this));
+            audioSessionControl->RegisterAudioSessionNotification (sessionEventCallback);
+        }
     }
 
     void deleteSessionEventCallback()
@@ -667,17 +670,17 @@ private:
                     lowLatencyBufferSizeMultiple = (int) fundamentalPeriod;
                 }
             }
-
-            return;
         }
+        else
+        {
+            REFERENCE_TIME defaultPeriod, minPeriod;
 
-        REFERENCE_TIME defaultPeriod, minPeriod;
+            if (! check (audioClient->GetDevicePeriod (&defaultPeriod, &minPeriod)))
+                return;
 
-        if (! check (audioClient->GetDevicePeriod (&defaultPeriod, &minPeriod)))
-            return;
-
-        minBufferSize = refTimeToSamples (minPeriod, defaultSampleRate);
-        defaultBufferSize = refTimeToSamples (defaultPeriod, defaultSampleRate);
+            minBufferSize = refTimeToSamples (minPeriod, defaultSampleRate);
+            defaultBufferSize = refTimeToSamples (defaultPeriod, defaultSampleRate);
+        }
     }
 
     void querySupportedSampleRates (WAVEFORMATEXTENSIBLE format, ComSmartPtr<IAudioClient>& audioClient)
@@ -891,25 +894,25 @@ private:
 
     bool tryInitialisingWithBufferSize (int bufferSizeSamples)
     {
-        auto format = findSupportedFormat (client, numChannels, sampleRate);
+        if (auto format = findSupportedFormat (client, numChannels, sampleRate))
+        {
+            auto isInitialised = isLowLatencyMode (deviceMode) ? initialiseLowLatencyClient (bufferSizeSamples, *format)
+                                                               : initialiseStandardClient   (bufferSizeSamples, *format);
 
-        if (! format.has_value())
-            return false;
+            if (isInitialised)
+            {
+                actualNumChannels  = format->Format.nChannels;
+                const bool isFloat = format->Format.wFormatTag == WAVE_FORMAT_EXTENSIBLE && format->SubFormat == KSDATAFORMAT_SUBTYPE_IEEE_FLOAT;
+                bytesPerSample     = format->Format.wBitsPerSample / 8;
+                bytesPerFrame      = format->Format.nBlockAlign;
 
-        auto isInitialised = isLowLatencyMode (deviceMode) ? initialiseLowLatencyClient (bufferSizeSamples, *format)
-                                                           : initialiseStandardClient   (bufferSizeSamples, *format);
+                updateFormat (isFloat);
 
-        if (! isInitialised)
-            return false;
+                return true;
+            }
+        }
 
-        actualNumChannels  = format->Format.nChannels;
-        const bool isFloat = format->Format.wFormatTag == WAVE_FORMAT_EXTENSIBLE && format->SubFormat == KSDATAFORMAT_SUBTYPE_IEEE_FLOAT;
-        bytesPerSample     = format->Format.wBitsPerSample / 8;
-        bytesPerFrame      = format->Format.nBlockAlign;
-
-        updateFormat (isFloat);
-
-        return true;
+        return false;
     }
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (WASAPIDeviceBase)
@@ -1307,26 +1310,22 @@ public:
 
     StringArray getOutputChannelNames() override
     {
-        if (outputDevice == nullptr)
-            return {};
-
         StringArray outChannels;
 
-        for (int i = 1; i <= outputDevice->maxNumChannels; ++i)
-            outChannels.add ("Output channel " + String (i));
+        if (outputDevice != nullptr)
+            for (int i = 1; i <= outputDevice->maxNumChannels; ++i)
+                outChannels.add ("Output channel " + String (i));
 
         return outChannels;
     }
 
     StringArray getInputChannelNames() override
     {
-        if (inputDevice == nullptr)
-            return {};
-
         StringArray inChannels;
 
-        for (int i = 1; i <= inputDevice->maxNumChannels; ++i)
-            inChannels.add ("Input channel " + String (i));
+        if (inputDevice != nullptr)
+            for (int i = 1; i <= inputDevice->maxNumChannels; ++i)
+                inChannels.add ("Input channel " + String (i));
 
         return inChannels;
     }
@@ -1402,8 +1401,8 @@ public:
         if (inputDevice != nullptr)   ResetEvent (inputDevice->clientEvent);
         if (outputDevice != nullptr)  ResetEvent (outputDevice->clientEvent);
 
-        // No lock here; background thread is not running
-        flags &= ~(flagShutdown | flagSampleRateChanged);
+        shouldShutdown = false;
+        deviceSampleRateChanged = false;
 
         startThread (Priority::high);
         Thread::sleep (5);
@@ -1432,8 +1431,7 @@ public:
             }
         }
 
-        flags |= flagOpen;
-
+        isOpen_ = true;
         return lastError;
     }
 
@@ -1450,58 +1448,45 @@ public:
         if (inputDevice != nullptr)   inputDevice->close();
         if (outputDevice != nullptr)  outputDevice->close();
 
-        // Background thread has stopped at this point
-        flags &= ~flagOpen;
+        isOpen_ = false;
     }
 
-    bool isOpen() override
-    {
-        return ((flags & flagOpen) != 0) && isThreadRunning();
-    }
-
-    bool isPlaying() override
-    {
-        return ((flags & (flagOpen | flagStarted)) == (flagOpen | flagStarted)) && isThreadRunning();
-    }
+    bool isOpen() override       { return isOpen_ && isThreadRunning(); }
+    bool isPlaying() override    { return isStarted && isOpen_ && isThreadRunning(); }
 
     void start (AudioIODeviceCallback* call) override
     {
+        if (isOpen_ && call != nullptr && ! isStarted)
         {
-            const ScopedLock sl (startStopLock);
-
-            if ((flags & (flagOpen | flagStarted)) != flagOpen || call == nullptr)
-                return;
-
             if (! isThreadRunning())
             {
                 // something's gone wrong and the thread's stopped..
-                flags &= ~flagOpen;
+                isOpen_ = false;
                 return;
             }
-        }
 
-        call->audioDeviceAboutToStart (this);
+            call->audioDeviceAboutToStart (this);
 
-        {
             const ScopedLock sl (startStopLock);
-
             callback = call;
-            flags |= flagStarted;
+            isStarted = true;
         }
     }
 
     void stop() override
     {
-        auto* callbackLocal = std::invoke ([&]()
+        if (isStarted)
         {
-            const ScopedLock sl (startStopLock);
+            auto* callbackLocal = callback;
 
-            const auto wasStarted = (flags.fetch_and (~flagStarted) & flagStarted) != 0;
-            return wasStarted ? callback : nullptr;
-        });
+            {
+                const ScopedLock sl (startStopLock);
+                isStarted = false;
+            }
 
-        if (callbackLocal != nullptr)
-            callbackLocal->audioDeviceStopped();
+            if (callbackLocal != nullptr)
+                callbackLocal->audioDeviceStopped();
+        }
     }
 
     void setMMThreadPriority()
@@ -1510,13 +1495,13 @@ public:
         JUCE_LOAD_WINAPI_FUNCTION (dll, AvSetMmThreadCharacteristicsW, avSetMmThreadCharacteristics, HANDLE, (LPCWSTR, LPDWORD))
         JUCE_LOAD_WINAPI_FUNCTION (dll, AvSetMmThreadPriority, avSetMmThreadPriority, HANDLE, (HANDLE, AVRT_PRIORITY))
 
-        if (avSetMmThreadCharacteristics == nullptr || avSetMmThreadPriority == nullptr)
-            return;
+        if (avSetMmThreadCharacteristics != nullptr && avSetMmThreadPriority != nullptr)
+        {
+            DWORD dummy = 0;
 
-        DWORD dummy = 0;
-
-        if (auto h = avSetMmThreadCharacteristics (L"Pro Audio", &dummy))
-            avSetMmThreadPriority (h, AVRT_PRIORITY_NORMAL);
+            if (auto h = avSetMmThreadCharacteristics (L"Pro Audio", &dummy))
+                avSetMmThreadPriority (h, AVRT_PRIORITY_NORMAL);
+        }
     }
 
     void run() override
@@ -1529,6 +1514,8 @@ public:
 
         AudioBuffer<float> ins  (jmax (1, numInputBuffers),  bufferSize + 32);
         AudioBuffer<float> outs (jmax (1, numOutputBuffers), bufferSize + 32);
+        auto inputBuffers  = ins.getArrayOfWritePointers();
+        auto outputBuffers = outs.getArrayOfWritePointers();
         ins.clear();
         outs.clear();
 
@@ -1537,7 +1524,7 @@ public:
             if ((outputDevice != nullptr && outputDevice->shouldShutdown)
                 || (inputDevice != nullptr && inputDevice->shouldShutdown))
             {
-                flags |= flagShutdown;
+                shouldShutdown = true;
                 triggerAsyncUpdate();
 
                 break;
@@ -1567,11 +1554,11 @@ public:
                         inputDevice->handleDeviceBuffer();
                 }
 
-                inputDevice->copyBuffersFromReservoir (ins.getArrayOfWritePointers(), numInputBuffers, bufferSize);
+                inputDevice->copyBuffersFromReservoir (inputBuffers, numInputBuffers, bufferSize);
 
                 if (inputDevice->sampleRateHasChanged)
                 {
-                    flags |= flagSampleRateChanged;
+                    deviceSampleRateChanged = true;
                     triggerAsyncUpdate();
 
                     break;
@@ -1581,30 +1568,26 @@ public:
             {
                 const ScopedTryLock sl (startStopLock);
 
-                if (sl.isLocked() && (flags & flagStarted) != 0)
-                {
-                    callback->audioDeviceIOCallbackWithContext (ins.getArrayOfReadPointers(),
+                if (sl.isLocked() && isStarted)
+                    callback->audioDeviceIOCallbackWithContext (inputBuffers,
                                                                 numInputBuffers,
-                                                                outs.getArrayOfWritePointers(),
+                                                                outputBuffers,
                                                                 numOutputBuffers,
                                                                 bufferSize,
                                                                 {});
-                }
                 else
-                {
                     outs.clear();
-                }
             }
 
             if (outputDeviceActive)
             {
                 // Note that this function is handed the input device so it can check for the event and make sure
                 // the input reservoir is filled up correctly even when bufferSize > device actualBufferSize
-                outputDevice->copyBuffers (outs.getArrayOfReadPointers(), numOutputBuffers, bufferSize, inputDevice.get(), *this);
+                outputDevice->copyBuffers (outputBuffers, numOutputBuffers, bufferSize, inputDevice.get(), *this);
 
                 if (outputDevice->sampleRateHasChanged)
                 {
-                    flags |= flagSampleRateChanged;
+                    deviceSampleRateChanged = true;
                     triggerAsyncUpdate();
 
                     break;
@@ -1630,20 +1613,14 @@ private:
     Array<int> bufferSizes;
 
     // Active state...
-    std::atomic<int> flags { 0 };
-
-    enum Flags
-    {
-        flagOpen                = 1 << 0,
-        flagStarted             = 1 << 1,
-        flagShutdown            = 1 << 2,
-        flagSampleRateChanged   = 1 << 3,
-    };
-
+    bool isOpen_ = false, isStarted = false;
     int currentBufferSizeSamples = 0;
     double currentSampleRate = 0;
+
     AudioIODeviceCallback* callback = {};
     CriticalSection startStopLock;
+
+    std::atomic<bool> shouldShutdown { false }, deviceSampleRateChanged { false };
 
     BigInteger lastKnownInputChannels, lastKnownOutputChannels;
 
@@ -1700,39 +1677,33 @@ private:
             inputDevice = nullptr;
         };
 
-        const auto prevFlags = flags.fetch_and (~(flagShutdown | flagSampleRateChanged));
-
-        if ((prevFlags & flagShutdown) != 0)
+        if (shouldShutdown)
         {
             closeDevices();
-            return;
         }
-
-        if ((prevFlags & flagSampleRateChanged) == 0)
-            return;
-
-        auto sampleRateChangedByInput = (inputDevice != nullptr && inputDevice->sampleRateHasChanged);
-
-        closeDevices();
-        initialise();
-
-        auto changedSampleRate = std::invoke ([this, sampleRateChangedByInput]
+        else if (deviceSampleRateChanged)
         {
-            if (inputDevice != nullptr && sampleRateChangedByInput)
-                return inputDevice->defaultSampleRate;
+            auto sampleRateChangedByInput = (inputDevice != nullptr && inputDevice->sampleRateHasChanged);
 
-            if (outputDevice != nullptr && ! sampleRateChangedByInput)
-                return outputDevice->defaultSampleRate;
+            closeDevices();
+            initialise();
 
-            return 0.0;
-        });
+            auto changedSampleRate = [this, sampleRateChangedByInput]()
+            {
+                if (inputDevice != nullptr && sampleRateChangedByInput)
+                    return inputDevice->defaultSampleRate;
 
-        open (lastKnownInputChannels,
-              lastKnownOutputChannels,
-              changedSampleRate,
-              currentBufferSizeSamples);
+                if (outputDevice != nullptr && ! sampleRateChangedByInput)
+                    return outputDevice->defaultSampleRate;
 
-        start (callback);
+                return 0.0;
+            }();
+
+            open (lastKnownInputChannels, lastKnownOutputChannels,
+                  changedSampleRate, currentBufferSizeSamples);
+
+            start (callback);
+        }
     }
 
     //==============================================================================

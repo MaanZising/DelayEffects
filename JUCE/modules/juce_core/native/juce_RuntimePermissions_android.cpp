@@ -81,9 +81,6 @@ static StringArray jucePermissionToAndroidPermissions (RuntimePermissions::Permi
 
         case RuntimePermissions::readMediaVideo:
             return { externalStorageOrMedia ("android.permission.READ_MEDIA_VIDEO") };
-
-        case RuntimePermissions::postNotification:
-            return { "android.permission.POST_NOTIFICATIONS" };
     }
 
     // invalid permission
@@ -104,7 +101,6 @@ static RuntimePermissions::PermissionID androidPermissionToJucePermission (const
         { "android.permission.READ_MEDIA_IMAGES",       RuntimePermissions::readMediaImages },
         { "android.permission.READ_MEDIA_VIDEO",        RuntimePermissions::readMediaVideo },
         { "android.permission.BLUETOOTH_SCAN",          RuntimePermissions::bluetoothMidi },
-        { "android.permission.POST_NOTIFICATIONS",      RuntimePermissions::postNotification },
     };
 
     const auto iter = map.find (permission);
@@ -122,7 +118,8 @@ struct PermissionsRequest
 //==============================================================================
 struct PermissionsOverlay final : public FragmentOverlay
 {
-    explicit PermissionsOverlay (CriticalSection& cs) : overlayGuard (cs) {}
+    PermissionsOverlay (CriticalSection& cs) : overlayGuard (cs) {}
+    ~PermissionsOverlay() override = default;
 
     struct PermissionResult
     {
@@ -247,7 +244,7 @@ void RuntimePermissions::request (PermissionID permission, Callback callback)
 
     auto alreadyGranted = isGranted (permission);
 
-    if (alreadyGranted)
+    if (alreadyGranted || getAndroidSDKVersion() < 23)
     {
         callback (alreadyGranted);
         return;
@@ -276,7 +273,7 @@ void RuntimePermissions::request (PermissionID permission, Callback callback)
 
 bool RuntimePermissions::isRequired (PermissionID /*permission*/)
 {
-    return true;
+    return getAndroidSDKVersion() >= 23;
 }
 
 bool RuntimePermissions::isGranted (PermissionID permission)

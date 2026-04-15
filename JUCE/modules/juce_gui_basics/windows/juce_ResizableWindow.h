@@ -322,12 +322,12 @@ public:
     };
 
     //==============================================================================
-    /** @cond */
+   #ifndef DOXYGEN
     [[deprecated ("use setContentOwned and setContentNonOwned instead.")]]
     void setContentComponent (Component* newContentComponent,
                               bool deleteOldOne = true,
                               bool resizeToFit = false);
-    /** @endcond */
+   #endif
 
     using TopLevelWindow::addToDesktop;
 

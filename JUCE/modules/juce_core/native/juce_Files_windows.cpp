@@ -253,12 +253,12 @@ namespace WindowsFileHelpers
 //==============================================================================
 #if JUCE_ALLOW_STATIC_NULL_VARIABLES
 
-JUCE_BEGIN_IGNORE_DEPRECATION_WARNINGS
+JUCE_BEGIN_IGNORE_WARNINGS_MSVC (4996)
 
 const juce_wchar File::separator = '\\';
 const StringRef File::separatorString ("\\");
 
-JUCE_END_IGNORE_DEPRECATION_WARNINGS
+JUCE_END_IGNORE_WARNINGS_MSVC
 
 #endif
 

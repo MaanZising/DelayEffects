@@ -38,8 +38,7 @@ JUCE_BEGIN_IGNORE_WARNINGS_GCC_LIKE ("-Wsign-conversion",
                                      "-Wcast-align",
                                      "-Wunused-variable",
                                      "-Wunused-function",
-                                     "-Wstringop-overflow",
-                                     "-Wimplicit-fallthrough")
+                                     "-Wstringop-overflow")
 
 JUCE_BEGIN_IGNORE_WARNINGS_MSVC (4189 4706)
 

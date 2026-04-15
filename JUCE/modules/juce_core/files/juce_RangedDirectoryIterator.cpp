@@ -35,7 +35,8 @@
 namespace juce
 {
 
-JUCE_BEGIN_IGNORE_DEPRECATION_WARNINGS
+JUCE_BEGIN_IGNORE_WARNINGS_GCC_LIKE ("-Wdeprecated-declarations")
+JUCE_BEGIN_IGNORE_WARNINGS_MSVC (4996)
 
 float DirectoryEntry::getEstimatedProgress() const
 {
@@ -84,6 +85,7 @@ void RangedDirectoryIterator::increment()
         iterator = nullptr;
 }
 
-JUCE_END_IGNORE_DEPRECATION_WARNINGS
+JUCE_END_IGNORE_WARNINGS_GCC_LIKE
+JUCE_END_IGNORE_WARNINGS_MSVC
 
 } // namespace juce

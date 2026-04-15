@@ -1029,11 +1029,13 @@ File File::getLinkedTarget() const
 //==============================================================================
 #if JUCE_ALLOW_STATIC_NULL_VARIABLES
 
-JUCE_BEGIN_IGNORE_DEPRECATION_WARNINGS
+JUCE_BEGIN_IGNORE_WARNINGS_GCC_LIKE ("-Wdeprecated-declarations")
+JUCE_BEGIN_IGNORE_WARNINGS_MSVC (4996)
 
 const File File::nonexistent{};
 
-JUCE_END_IGNORE_DEPRECATION_WARNINGS
+JUCE_END_IGNORE_WARNINGS_GCC_LIKE
+JUCE_END_IGNORE_WARNINGS_MSVC
 
 #endif
 
@@ -1156,10 +1158,10 @@ public:
         expect (home.getChildFile ("...xyz").getFileName() == "...xyz");
         expect (home.getChildFile ("./xyz") == home.getChildFile ("xyz"));
         expect (home.getChildFile ("././xyz") == home.getChildFile ("xyz"));
-        expect (home.getChildFile ("../xyz") == home.getSiblingFile ("xyz"));
-        expect (home.getChildFile (".././xyz") == home.getSiblingFile ("xyz"));
-        expect (home.getChildFile (".././xyz/./abc") == home.getSiblingFile ("xyz/abc"));
-        expect (home.getChildFile ("./../xyz") == home.getSiblingFile ("xyz"));
+        expect (home.getChildFile ("../xyz") == home.getParentDirectory().getChildFile ("xyz"));
+        expect (home.getChildFile (".././xyz") == home.getParentDirectory().getChildFile ("xyz"));
+        expect (home.getChildFile (".././xyz/./abc") == home.getParentDirectory().getChildFile ("xyz/abc"));
+        expect (home.getChildFile ("./../xyz") == home.getParentDirectory().getChildFile ("xyz"));
         expect (home.getChildFile ("a1/a2/a3/./../../a4") == home.getChildFile ("a1/a4"));
 
         expect (! File().hasReadAccess());

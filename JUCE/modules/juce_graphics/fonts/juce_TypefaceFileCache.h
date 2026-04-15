@@ -32,7 +32,8 @@
   ==============================================================================
 */
 
-/** @cond */
+#ifndef DOXYGEN
+
 namespace juce
 {
 
@@ -67,4 +68,5 @@ private:
 };
 
 } // namespace juce
-/** @endcond */
+
+#endif

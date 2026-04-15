@@ -129,16 +129,14 @@ static constexpr int translateVirtualToAsciiKeyCode (int keyCode) noexcept
 constexpr int extendedKeyModifier = 0x30000;
 
 //==============================================================================
-struct JuceCALayerDelegateCallback
-{
-    virtual ~JuceCALayerDelegateCallback() = default;
-    virtual void displayLayer (CALayer*) = 0;
-};
-
-class API_AVAILABLE (macos (10.12)) JuceCALayerDelegate final : public ObjCClass<NSObject<CALayerDelegate>>
+class JuceCALayerDelegate final : public ObjCClass<NSObject<CALayerDelegate>>
 {
 public:
-    using Callback = JuceCALayerDelegateCallback;
+    struct Callback
+    {
+        virtual ~Callback() = default;
+        virtual void displayLayer (CALayer*) = 0;
+    };
 
     static NSObject<CALayerDelegate>* construct (Callback* owner)
     {
@@ -178,7 +176,7 @@ private:
 
 //==============================================================================
 class NSViewComponentPeer final : public ComponentPeer,
-                                  private JuceCALayerDelegateCallback
+                                  private JuceCALayerDelegate::Callback
 {
 public:
     NSViewComponentPeer (Component& comp, const int windowStyleFlags, NSView* viewToAttachTo)
@@ -190,7 +188,7 @@ public:
         appFocusChangeCallback = appFocusChanged;
         isEventBlockedByModalComps = checkEventBlockedByModalComps;
 
-        auto r = makeCGRect (component.getLocalBounds());
+        auto r = makeNSRect (component.getLocalBounds());
 
         view = [createViewInstance() initWithFrame: r];
         setOwner (view, this);
@@ -391,7 +389,7 @@ public:
 
     void setBounds (const Rectangle<int>& newBounds, bool) override
     {
-        auto r = makeCGRect (newBounds);
+        auto r = makeNSRect (newBounds);
         auto oldViewSize = [view frame].size;
 
         if (isSharedWindow)
@@ -731,32 +729,26 @@ public:
         if (! Process::isForegroundProcess())
             Process::makeForegroundProcess();
 
-        ModifierKeys::currentModifiers = ModifierKeys::getCurrentModifiers().withFlags (getModifierForButtonNumber ([ev buttonNumber]));
+        ModifierKeys::currentModifiers = ModifierKeys::currentModifiers.withFlags (getModifierForButtonNumber ([ev buttonNumber]));
         sendMouseEvent (ev);
     }
 
     void redirectMouseUp (NSEvent* ev)
     {
-        ModifierKeys::currentModifiers = ModifierKeys::getCurrentModifiers().withoutFlags (getModifierForButtonNumber ([ev buttonNumber]));
+        ModifierKeys::currentModifiers = ModifierKeys::currentModifiers.withoutFlags (getModifierForButtonNumber ([ev buttonNumber]));
         sendMouseEvent (ev);
         showArrowCursorIfNeeded();
     }
 
     void redirectMouseDrag (NSEvent* ev)
     {
-        // Very rarely we seem to receive mouseDragged messages in between draggingEntered and draggingExited
-        // messages. If our drag target is in a viewport, it can cause it to scroll around, so we ignore these
-        // stray mouseDragged messages.
-        if (draggingActive)
-            return;
-
-        ModifierKeys::currentModifiers = ModifierKeys::getCurrentModifiers().withFlags (getModifierForButtonNumber ([ev buttonNumber]));
+        ModifierKeys::currentModifiers = ModifierKeys::currentModifiers.withFlags (getModifierForButtonNumber ([ev buttonNumber]));
         sendMouseEvent (ev);
     }
 
     void redirectMouseMove (NSEvent* ev)
     {
-        ModifierKeys::currentModifiers = ModifierKeys::getCurrentModifiers().withoutMouseButtons();
+        ModifierKeys::currentModifiers = ModifierKeys::currentModifiers.withoutMouseButtons();
 
         NSPoint windowPos = [ev locationInWindow];
         NSPoint screenPos = [[ev window] convertRectToScreen: NSMakeRect (windowPos.x, windowPos.y, 1.0f, 1.0f)].origin;
@@ -768,7 +760,7 @@ public:
         }
         else
             // moved into another window which overlaps this one, so trigger an exit
-            handleMouseEvent (MouseInputSource::InputSourceType::mouse, MouseInputSource::offscreenMousePos, ModifierKeys::getCurrentModifiers(),
+            handleMouseEvent (MouseInputSource::InputSourceType::mouse, MouseInputSource::offscreenMousePos, ModifierKeys::currentModifiers,
                               getMousePressure (ev), MouseInputSource::defaultOrientation, getMouseTime (ev));
 
         showArrowCursorIfNeeded();
@@ -1121,7 +1113,7 @@ public:
         const Rectangle currentBounds { (float) frameSize.width, (float) frameSize.height };
 
         for (auto& i : deferredRepaints)
-            [view setNeedsDisplayInRect: makeCGRect (i)];
+            [view setNeedsDisplayInRect: makeNSRect (i)];
 
         lastRepaintTime = Time::getMillisecondCounter();
 
@@ -1318,7 +1310,7 @@ public:
         constrainer->checkBounds (pos, original, screenBounds,
                                   isStretchingTop, isStretchingLeft, isStretchingBottom, isStretchingRight);
 
-        return flippedScreenRect (makeCGRect (detail::ScalingHelpers::scaledScreenPosToUnscaled (scale, pos)));
+        return flippedScreenRect (makeNSRect (detail::ScalingHelpers::scaledScreenPosToUnscaled (scale, pos)));
     }
 
     static void showArrowCursorIfNeeded()
@@ -1347,7 +1339,7 @@ public:
         if ((flags & NSEventModifierFlagOption) != 0)       m |= ModifierKeys::altModifier;
         if ((flags & NSEventModifierFlagCommand) != 0)      m |= ModifierKeys::commandModifier;
 
-        ModifierKeys::currentModifiers = ModifierKeys::getCurrentModifiers().withOnlyMouseButtons().withFlags (m);
+        ModifierKeys::currentModifiers = ModifierKeys::currentModifiers.withOnlyMouseButtons().withFlags (m);
     }
 
     static void updateKeysDown (NSEvent* ev, bool isKeyDown)
@@ -1445,16 +1437,9 @@ public:
 
     static int getModifierForButtonNumber (const NSInteger num)
     {
-        switch (num)
-        {
-            case 0: return ModifierKeys::leftButtonModifier;
-            case 1: return ModifierKeys::rightButtonModifier;
-            case 2: return ModifierKeys::middleButtonModifier;
-            case 3: return ModifierKeys::backButtonModifier;
-            case 4: return ModifierKeys::forwardButtonModifier;
-        }
-
-        return 0;
+        return num == 0 ? ModifierKeys::leftButtonModifier
+                        : (num == 1 ? ModifierKeys::rightButtonModifier
+                                    : (num == 2 ? ModifierKeys::middleButtonModifier : 0));
     }
 
     static unsigned int getNSWindowStyleMask (const int flags) noexcept
@@ -1475,9 +1460,9 @@ public:
             if (@available (macOS 10.13, *))
                 return NSPasteboardTypeFileURL;
 
-            JUCE_BEGIN_IGNORE_DEPRECATION_WARNINGS
+            JUCE_BEGIN_IGNORE_WARNINGS_GCC_LIKE ("-Wdeprecated-declarations")
             return (NSString*) kUTTypeFileURL;
-            JUCE_END_IGNORE_DEPRECATION_WARNINGS
+            JUCE_END_IGNORE_WARNINGS_GCC_LIKE
         }();
 
         return [NSArray arrayWithObjects: type, (NSString*) kPasteboardTypeFileURLPromise, NSPasteboardTypeString, nil];
@@ -1485,12 +1470,6 @@ public:
 
     BOOL sendDragCallback (bool (ComponentPeer::* callback) (const DragInfo&), id <NSDraggingInfo> sender)
     {
-        if (callback == &NSViewComponentPeer::handleDragMove)
-            draggingActive = true;
-
-        if (callback == &NSViewComponentPeer::handleDragExit || callback == &NSViewComponentPeer::handleDragDrop)
-            draggingActive = false;
-
         NSPasteboard* pasteboard = [sender draggingPasteboard];
         NSString* contentType = [pasteboard availableTypeFromArray: getSupportedDragTypes()];
 
@@ -1654,7 +1633,7 @@ public:
 
         const auto handled = [&]() -> bool
         {
-            if (findCurrentTextInputTarget() != nullptr)
+            if (auto* target = findCurrentTextInputTarget())
                 if (const auto* inputContext = [view inputContext])
                     return [inputContext handleEvent: ev] && ! viewCannotHandleEvent;
 
@@ -1750,8 +1729,6 @@ public:
     bool isStretchingTop = false, isStretchingLeft = false, isStretchingBottom = false, isStretchingRight = false;
     bool windowRepresentsFile = false;
     bool isAlwaysOnTop = false, wasAlwaysOnTop = false, inBecomeKeyWindow = false;
-    bool inPerformKeyEquivalent = false;
-    bool draggingActive = false;
     String stringBeingComposed;
     int startOfMarkedTextInTextInputTarget = 0;
 
@@ -1939,9 +1916,6 @@ private:
             case NSEventTypeRightMouseUp:
             case NSEventTypeOtherMouseUp:
             case NSEventTypeOtherMouseDragged:
-           #if JUCE_MAC_API_VERSION_CAN_BE_BUILT (26, 0)
-            case NSEventTypeMouseCancelled:
-           #endif
                 if (Desktop::getInstance().getDraggingMouseSource (0) != nullptr)
                     return false;
                 break;
@@ -2357,13 +2331,6 @@ struct JuceNSViewClass final : public NSViewComponentPeerWrapper<ObjCClass<NSVie
             if (auto* owner = getOwner (self))
             {
                 const auto ref = owner->safeComponent;
-                const auto prev = std::exchange (owner->inPerformKeyEquivalent, true);
-
-                const ScopeGuard scope { [&ref, owner, prev]
-                {
-                    if (ref != nullptr)
-                        owner->inPerformKeyEquivalent = prev;
-                } };
 
                 if (owner->sendEventToInputContextOrComponent (ev))
                 {
@@ -2605,7 +2572,7 @@ struct JuceNSViewClass final : public NSViewComponentPeerWrapper<ObjCClass<NSVie
                                                                    : target->getTextBounds (codePointRange).getRectangle (0);
                         const auto areaOnDesktop = comp->localAreaToGlobal (rect);
 
-                        return flippedScreenRect (makeCGRect (detail::ScalingHelpers::scaledScreenPosToUnscaled (areaOnDesktop)));
+                        return flippedScreenRect (makeNSRect (detail::ScalingHelpers::scaledScreenPosToUnscaled (areaOnDesktop)));
                     }
                 }
             }
@@ -2873,7 +2840,7 @@ struct JuceNSWindowClass final : public NSViewComponentPeerWrapper<ObjCClass<NSW
                                                             .withHeight ((float) constrainer->getMaximumHeight());
                         const auto constrained = expanded.constrainedWithin (safeScreenBounds);
 
-                        return flippedScreenRect (makeCGRect ([&]
+                        return flippedScreenRect (makeNSRect ([&]
                                                               {
                                                                   if (constrained == owner->getBounds().toFloat())
                                                                       return owner->lastSizeBeforeZoom.toFloat();
@@ -3013,7 +2980,7 @@ void Desktop::setKioskComponent (Component* kioskComp, bool shouldBeEnabled, boo
         else if (! shouldBeEnabled)
             [NSApp setPresentationOptions: NSApplicationPresentationDefault];
 
-        peer->setFullScreen (shouldBeEnabled);
+        peer->setFullScreen (true);
     }
     else
     {

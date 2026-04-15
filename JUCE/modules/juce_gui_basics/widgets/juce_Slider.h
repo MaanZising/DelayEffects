@@ -622,10 +622,10 @@ public:
     /** You can assign a lambda to this callback object to have it called when the slider's drag ends. */
     std::function<void()> onDragEnd;
 
-    /** You can assign a lambda that will be used to convert text to a slider value. */
+    /** You can assign a lambda that will be used to convert textual values to the slider's normalised position. */
     std::function<double (const String&)> valueFromTextFunction;
 
-    /** You can assign a lambda that will be used to convert a slider value to text. */
+    /** You can assign a lambda that will be used to convert the slider's normalised position to a textual value. */
     std::function<String (double)> textFromValueFunction;
 
     //==============================================================================
@@ -690,7 +690,7 @@ public:
         transparent window, so if you're using an OS that can't do transparent windows
         you'll have to add it to a parent component instead).
 
-        By default the popup display is shown when hovering will remain visible for 2 seconds,
+        By default the popup display shown when hovering will remain visible for 2 seconds,
         but it is possible to change this by passing a different hoverTimeout value. A
         value of -1 will cause the popup to remain until a mouseExit() occurs on the slider.
     */
@@ -746,29 +746,25 @@ public:
     virtual void valueChanged();
 
     //==============================================================================
-    /** Returns a slider value for some given text.
-
-        Subclasses can override this to convert a text string to a value.
-        Alternatively assign a lambda to valueFromTextFunction.
+    /** Subclasses can override this to convert a text string to a value.
 
         When the user enters something into the text-entry box, this method is
         called to convert it to a value.
         The default implementation just tries to convert it to a double.
 
-        @see getTextFromValue, valueFromTextFunction, textFromValueFunction
+        @see getTextFromValue
     */
     virtual double getValueFromText (const String& text);
 
-    /** Returns a text representation for a given slider value.
+    /** Turns the slider's current value into a text string.
 
         Subclasses can override this to customise the formatting of the text-entry box.
-        Alternatively assign a lambda to textFromValueFunction.
 
         The default implementation just turns the value into a string, using
         a number of decimal places based on the range interval. If a suffix string
         has been set using setTextValueSuffix(), this will be appended to the text.
 
-        @see getValueFromText, textFromValueFunction, valueFromTextFunction
+        @see getValueFromText
     */
     virtual String getTextFromValue (double value);
 
@@ -1024,7 +1020,7 @@ public:
     std::unique_ptr<AccessibilityHandler> createAccessibilityHandler() override;
 
     //==============================================================================
-    /** @cond */
+   #ifndef DOXYGEN
     // These methods' bool parameters have changed: see the new method signature.
     [[deprecated]] void setValue (double, bool);
     [[deprecated]] void setValue (double, bool, bool);
@@ -1036,7 +1032,7 @@ public:
     [[deprecated]] void setMaxValue (double, bool);
     [[deprecated]] void setMinAndMaxValues (double, double, bool, bool);
     [[deprecated]] void setMinAndMaxValues (double, double, bool);
-    /** @endcond */
+   #endif
 
 private:
     //==============================================================================

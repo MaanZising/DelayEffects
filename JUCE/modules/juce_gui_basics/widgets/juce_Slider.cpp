@@ -672,7 +672,7 @@ public:
             m.addSubMenu (TRANS ("Rotary mode"), rotaryMenu);
         }
 
-        m.showMenuAsync (PopupMenu::Options().withTargetComponent (owner).withMousePosition(),
+        m.showMenuAsync (PopupMenu::Options(),
                          ModalCallbackFunction::forComponent (sliderMenuCallback, &owner));
     }
 

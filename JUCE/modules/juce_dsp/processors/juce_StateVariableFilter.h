@@ -74,7 +74,7 @@ namespace juce::dsp::StateVariableFilter
         using ParametersPtr = typename Parameters<NumericType>::Ptr;
 
         //==============================================================================
-        /** @cond */
+       #ifndef DOXYGEN
         /** Creates a filter with default parameters. */
         [[deprecated ("The classes in the StateVariableFilter namespace are deprecated. you should "
                      "use the equivalent functionality in the StateVariableTPTFilter class.")]]
@@ -84,7 +84,7 @@ namespace juce::dsp::StateVariableFilter
         [[deprecated ("The classes in the StateVariableFilter namespace are deprecated. you should "
                      "use the equivalent functionality in the StateVariableTPTFilter class.")]]
         Filter (ParametersPtr parametersToUse) : parameters (std::move (parametersToUse)) { reset(); }
-        /** @endcond */
+       #endif
 
         /** Creates a copy of another filter. */
         Filter (const Filter&) = default;

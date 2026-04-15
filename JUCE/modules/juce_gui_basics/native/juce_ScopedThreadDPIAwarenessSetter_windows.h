@@ -40,8 +40,6 @@ class ScopedThreadDPIAwarenessSetter
 {
 public:
     explicit ScopedThreadDPIAwarenessSetter (void* nativeWindow);
-    ScopedThreadDPIAwarenessSetter (ScopedThreadDPIAwarenessSetter&&) noexcept;
-    ScopedThreadDPIAwarenessSetter& operator= (ScopedThreadDPIAwarenessSetter&&) noexcept;
     ~ScopedThreadDPIAwarenessSetter();
 
 private:

@@ -47,12 +47,17 @@ DECLARE_JNI_CLASS (MediaScannerConnection, "android/media/MediaScannerConnection
 #define JNI_CLASS_MEMBERS(METHOD, STATICMETHOD, FIELD, STATICFIELD, CALLBACK) \
  METHOD (query,                         "query",                        "(Landroid/net/Uri;[Ljava/lang/String;Ljava/lang/String;[Ljava/lang/String;Ljava/lang/String;)Landroid/database/Cursor;") \
  METHOD (openInputStream,               "openInputStream",              "(Landroid/net/Uri;)Ljava/io/InputStream;") \
- METHOD (openOutputStream,              "openOutputStream",             "(Landroid/net/Uri;)Ljava/io/OutputStream;") \
+ METHOD (openOutputStream,              "openOutputStream",             "(Landroid/net/Uri;)Ljava/io/OutputStream;")
+
+DECLARE_JNI_CLASS (ContentResolver, "android/content/ContentResolver")
+#undef JNI_CLASS_MEMBERS
+
+#define JNI_CLASS_MEMBERS(METHOD, STATICMETHOD, FIELD, STATICFIELD, CALLBACK) \
  METHOD (takePersistableUriPermission,      "takePersistableUriPermission",     "(Landroid/net/Uri;I)V") \
  METHOD (releasePersistableUriPermission,   "releasePersistableUriPermission",  "(Landroid/net/Uri;I)V") \
  METHOD (getPersistedUriPermissions,        "getPersistedUriPermissions",       "()Ljava/util/List;")
 
-DECLARE_JNI_CLASS (ContentResolver, "android/content/ContentResolver")
+DECLARE_JNI_CLASS_WITH_MIN_SDK (ContentResolver19, "android/content/ContentResolver", 19)
 #undef JNI_CLASS_MEMBERS
 
 #define JNI_CLASS_MEMBERS(METHOD, STATICMETHOD, FIELD, STATICFIELD, CALLBACK) \
@@ -100,7 +105,6 @@ DECLARE_JNI_CLASS (AndroidInputStream, "java/io/InputStream")
 DECLARE_JNI_CLASS (AndroidApplicationInfo, "android/content/pm/ApplicationInfo")
 #undef JNI_CLASS_MEMBERS
 
-
 #define JNI_CLASS_MEMBERS(METHOD, STATICMETHOD, FIELD, STATICFIELD, CALLBACK) \
  STATICMETHOD (buildChildDocumentsUri,              "buildChildDocumentsUri",               "(Ljava/lang/String;Ljava/lang/String;)Landroid/net/Uri;") \
  STATICMETHOD (buildDocumentUri,                    "buildDocumentUri",                     "(Ljava/lang/String;Ljava/lang/String;)Landroid/net/Uri;") \
@@ -111,18 +115,28 @@ DECLARE_JNI_CLASS (AndroidApplicationInfo, "android/content/pm/ApplicationInfo")
  STATICMETHOD (deleteDocument,                      "deleteDocument",                       "(Landroid/content/ContentResolver;Landroid/net/Uri;)Z") \
  STATICMETHOD (getDocumentId,                       "getDocumentId",                        "(Landroid/net/Uri;)Ljava/lang/String;") \
  STATICMETHOD (getRootId,                           "getRootId",                            "(Landroid/net/Uri;)Ljava/lang/String;") \
- STATICMETHOD (isDocumentUri,                       "isDocumentUri",                        "(Landroid/content/Context;Landroid/net/Uri;)Z") \
+ STATICMETHOD (isDocumentUri,                       "isDocumentUri",                        "(Landroid/content/Context;Landroid/net/Uri;)Z")
+
+DECLARE_JNI_CLASS_WITH_MIN_SDK (DocumentsContract19, "android/provider/DocumentsContract", 19)
+#undef JNI_CLASS_MEMBERS
+
+#define JNI_CLASS_MEMBERS(METHOD, STATICMETHOD, FIELD, STATICFIELD, CALLBACK) \
  STATICMETHOD (buildChildDocumentsUriUsingTree,     "buildChildDocumentsUriUsingTree",      "(Landroid/net/Uri;Ljava/lang/String;)Landroid/net/Uri;") \
  STATICMETHOD (buildDocumentUriUsingTree,           "buildDocumentUriUsingTree",            "(Landroid/net/Uri;Ljava/lang/String;)Landroid/net/Uri;") \
  STATICMETHOD (buildTreeDocumentUri,                "buildTreeDocumentUri",                 "(Ljava/lang/String;Ljava/lang/String;)Landroid/net/Uri;") \
  STATICMETHOD (createDocument,                      "createDocument",                       "(Landroid/content/ContentResolver;Landroid/net/Uri;Ljava/lang/String;Ljava/lang/String;)Landroid/net/Uri;") \
  STATICMETHOD (getTreeDocumentId,                   "getTreeDocumentId",                    "(Landroid/net/Uri;)Ljava/lang/String;") \
- STATICMETHOD (renameDocument,                      "renameDocument",                       "(Landroid/content/ContentResolver;Landroid/net/Uri;Ljava/lang/String;)Landroid/net/Uri;") \
+ STATICMETHOD (renameDocument,                      "renameDocument",                       "(Landroid/content/ContentResolver;Landroid/net/Uri;Ljava/lang/String;)Landroid/net/Uri;")
+
+DECLARE_JNI_CLASS_WITH_MIN_SDK (DocumentsContract21, "android/provider/DocumentsContract", 21)
+#undef JNI_CLASS_MEMBERS
+
+#define JNI_CLASS_MEMBERS(METHOD, STATICMETHOD, FIELD, STATICFIELD, CALLBACK) \
  STATICMETHOD (copyDocument,                        "copyDocument",                         "(Landroid/content/ContentResolver;Landroid/net/Uri;Landroid/net/Uri;)Landroid/net/Uri;") \
  STATICMETHOD (moveDocument,                        "moveDocument",                         "(Landroid/content/ContentResolver;Landroid/net/Uri;Landroid/net/Uri;Landroid/net/Uri;)Landroid/net/Uri;") \
  STATICMETHOD (removeDocument,                      "removeDocument",                       "(Landroid/content/ContentResolver;Landroid/net/Uri;Landroid/net/Uri;)Z")
 
-DECLARE_JNI_CLASS (DocumentsContract, "android/provider/DocumentsContract")
+DECLARE_JNI_CLASS_WITH_MIN_SDK (DocumentsContract24, "android/provider/DocumentsContract", 24)
 #undef JNI_CLASS_MEMBERS
 
 #define JNI_CLASS_MEMBERS(METHOD, STATICMETHOD, FIELD, STATICFIELD, CALLBACK) \
@@ -139,7 +153,7 @@ DECLARE_JNI_CLASS (AndroidMimeTypeMap, "android/webkit/MimeTypeMap")
  METHOD (isReadPermission,              "isReadPermission",               "()Z") \
  METHOD (isWritePermission,             "isWritePermission",              "()Z")
 
-DECLARE_JNI_CLASS (AndroidUriPermission, "android/content/UriPermission")
+DECLARE_JNI_CLASS_WITH_MIN_SDK (AndroidUriPermission, "android/content/UriPermission", 19)
 #undef JNI_CLASS_MEMBERS
 
     //==============================================================================
@@ -935,9 +949,9 @@ private:
 
 void FileOutputStream::flushInternal()
 {
-    if (fileHandle.isValid())
+    if (fileHandle != nullptr)
     {
-        if (fsync (fileHandle.get()) == -1)
+        if (fsync (getFD (fileHandle)) == -1)
             status = getResultForErrno();
 
         // This stuff tells the OS to asynchronously update the metadata

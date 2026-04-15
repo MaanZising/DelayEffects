@@ -70,15 +70,9 @@ struct Ranges final
 
         struct Split
         {
-            Split (size_t x, Range<int64> leftRangeIn, Range<int64> rightRangeIn)
-                : index { x },
-                  leftRange { leftRangeIn },
-                  rightRange { rightRangeIn }
-            {}
+            explicit Split (size_t x) : index { x } {}
 
             size_t index;
-            Range<int64> leftRange;
-            Range<int64> rightRange;
         };
 
         struct Erase
@@ -90,21 +84,29 @@ struct Ranges final
 
         struct Change
         {
-            Change (size_t x, Range<int64> oldRangeIn, Range<int64> newRangeIn)
-                : index { x },
-                  oldRange { oldRangeIn },
-                  newRange { newRangeIn }
-            {}
+            explicit Change (size_t x) : index { x } {}
 
             size_t index;
-            Range<int64> oldRange;
-            Range<int64> newRange;
         };
     };
 
     using Op = std::variant<Ops::New, Ops::Split, Ops::Erase, Ops::Change>;
 
     using Operations = std::vector<Op>;
+
+    static auto withOperationsFrom (const Operations& ops, const Operations& newOps)
+    {
+        auto result = ops;
+        result.insert (result.end(), newOps.begin(), newOps.end());
+        return result;
+    }
+
+    static auto withOperationsFrom (const Operations& ops, Op newOp)
+    {
+        auto result = ops;
+        result.insert (result.end(), newOp);
+        return result;
+    }
 
     Ranges() = default;
 
@@ -119,42 +121,42 @@ struct Ranges final
        #endif
     }
 
-    bool operator== (const Ranges& other) const { return ranges == other.ranges; }
-    bool operator!= (const Ranges& other) const { return ranges != other.ranges; }
-
-    auto& getRanges()       { return ranges; }
-    auto& getRanges() const { return ranges; }
-
     //==============================================================================
     // Basic operations
-    void split (int64 i, Operations& ops)
+    Operations split (int64 i)
     {
+        Operations ops;
+
         const auto elemIndex = getIndexForEnclosingRange (i);
 
         if (! elemIndex.has_value())
-            return;
+            return {};
 
         auto& elem = ranges[*elemIndex];
 
         if (elem.getStart() == i)
-            return;
+            return {};
 
-        ops.push_back (Ops::Split { *elemIndex, elem.withEnd (i), elem.withStart (i) });
+        ops = withOperationsFrom (ops, Ops::Split { *elemIndex });
 
         const auto oldLength = elem.getLength();
         elem.setEnd (i);
 
         ranges.insert (iteratorWithAdvance (ranges.begin(), *elemIndex + 1),
                        { i, i + oldLength - elem.getLength() });
+
+        return ops;
     }
 
-    void erase (Range<int64> r, Operations& ops)
+    Operations erase (Range<int64> r)
     {
         if (r.isEmpty())
-            return;
+            return {};
+
+        Operations ops;
 
         for (auto i : { r.getStart(), r.getEnd() })
-            split (i, ops);
+            ops = withOperationsFrom (ops, split (i));
 
         const auto firstToDelete = std::lower_bound (ranges.begin(),
                                                      ranges.end(),
@@ -169,23 +171,26 @@ struct Ranges final
                                                           { return elem.getStart() < value; });
 
         if (firstToDelete != ranges.end())
-            ops.push_back (Ops::Erase { { getIndex (firstToDelete), getIndex (beyondLastToDelete) } });
+            ops = withOperationsFrom (ops, Ops::Erase { { getIndex (firstToDelete), getIndex (beyondLastToDelete) } });
 
         ranges.erase (firstToDelete, beyondLastToDelete);
+
+        return ops;
     }
 
-    void drop (Range<int64> r, Operations& ops)
+    Operations drop (Range<int64> r)
     {
-        erase (r, ops);
-        shift (r.getEnd(), -r.getLength(), ops);
+        auto ops = erase (r);
+        ops = withOperationsFrom (ops, shift (r.getEnd(), -r.getLength()));
+        return ops;
     }
 
     /*  Shift all ranges starting at or beyond the specified from parameter, by the specified amount.
     */
-    void shift (int64 from, int64 amount, Operations& ops)
+    Operations shift (int64 from, int64 amount)
     {
         if (amount == 0)
-            return;
+            return {};
 
         const auto shiftStartingFrom = std::lower_bound (ranges.begin(),
                                                          ranges.end(),
@@ -193,20 +198,25 @@ struct Ranges final
                                                          [] (auto& elem, auto& value)
                                                          { return elem.getStart() < value; });
 
+        Operations ops;
+
         for (auto it = shiftStartingFrom; it < ranges.end(); ++it)
         {
-            const auto oldRange = *it;
             *it += amount;
-            ops.push_back (Ops::Change { getIndex (it), oldRange, *it });
+            ops = withOperationsFrom (ops, Ops::Change { getIndex (it) });
         }
+
+        return ops;
     }
 
-    void set (Range<int64> newRange, Operations& ops)
+    Operations set (Range<int64> newRange)
     {
         if (newRange.isEmpty())
-            return;
+            return {};
 
-        erase (newRange, ops);
+        Operations ops;
+
+        ops = withOperationsFrom (ops, erase (newRange));
 
         const auto insertBefore = std::lower_bound (ranges.begin(),
                                                     ranges.end(),
@@ -214,17 +224,21 @@ struct Ranges final
                                                     [] (auto& elem, auto& value)
                                                     { return elem.getStart() < value; });
 
-        ops.push_back (Ops::New { getIndex (insertBefore) });
+        ops = withOperationsFrom (ops, Ops::New { getIndex (insertBefore) });
         ranges.insert (insertBefore, newRange);
+
+        return ops;
     }
 
-    void insert (Range<int64> newRange, Operations& ops)
+    Operations insert (Range<int64> newRange)
     {
         if (newRange.isEmpty())
-            return;
+            return {};
 
-        split (newRange.getStart(), ops);
-        shift (newRange.getStart(), newRange.getLength(), ops);
+        Operations ops;
+
+        ops = withOperationsFrom (ops, split (newRange.getStart()));
+        ops = withOperationsFrom (ops, shift (newRange.getStart(), newRange.getLength()));
 
         const auto insertBefore = std::lower_bound (ranges.begin(),
                                                     ranges.end(),
@@ -235,7 +249,9 @@ struct Ranges final
         const auto insertBeforeIndex = getIndex (insertBefore);
 
         ranges.insert (insertBefore, newRange);
-        ops.push_back (Ops::New { insertBeforeIndex });
+        ops = withOperationsFrom (ops, Ops::New { insertBeforeIndex });
+
+        return ops;
     }
 
     //==============================================================================
@@ -245,36 +261,40 @@ struct Ranges final
         ranges.clear();
     }
 
-    void eraseFrom (int64 i, Operations& ops)
+    Operations eraseFrom (int64 i)
     {
         if (ranges.empty())
-            return;
+            return {};
 
-        erase ({ i, ranges.back().getEnd() }, ops);
+        return erase ({ i, ranges.back().getEnd() });
     }
 
     /*  Merges neighbouring ranges backwards if they form a contiguous range.
     */
-    void mergeBack (size_t i, Operations& ops)
+    Operations mergeBack (size_t i)
     {
         jassert (isPositiveAndBelow (i, ranges.size()));
 
         if (i == 0 || i >= ranges.size())
-            return;
+            return {};
 
         const auto start = i - 1;
         const auto end = i;
 
         if (ranges[start].getEnd() != ranges[end].getStart())
-            return;
+            return {};
 
-        const auto oldRange = ranges[start];
+        Operations ops;
+
+        ops = withOperationsFrom (ops, Ops::Change { start });
         ranges[start].setEnd (ranges[end].getEnd());
-        ops.push_back (Ops::Change { start, oldRange, ranges[start] });
-        ops.push_back (Ops::Erase { { end, end + 1 } });
+
+        ops = withOperationsFrom (ops, Ops::Erase { { end, end + 1 } });
 
         ranges.erase (iteratorWithAdvance (ranges.begin(), end),
                       iteratorWithAdvance (ranges.begin(), end + 1));
+
+        return ops;
     }
 
     /*  Returns the ranges that have an intersection with the provided range. */
@@ -309,6 +329,19 @@ struct Ranges final
                 result.push_back (*intersection);
 
         return result;
+    }
+
+    std::optional<size_t> getIndexForEnclosingRange (int64 positionInTextRange) const
+    {
+        auto it = std::lower_bound (ranges.begin(),
+                                    ranges.end(),
+                                    positionInTextRange,
+                                    [] (auto& elem, auto& value) { return elem.getEnd() <= value; });
+
+        if (it != ranges.end() && it->getStart() <= positionInTextRange)
+            return getIndex (it);
+
+        return std::nullopt;
     }
 
     //==============================================================================
@@ -348,47 +381,6 @@ struct Ranges final
         return ranges.cend();
     }
 
-    auto* data() const
-    {
-        return ranges.data();
-    }
-
-    /* Returns an iterator for the Range element which includes the provided value. */
-    auto find (int64 i) const
-    {
-        const auto it = std::lower_bound (cbegin(),
-                                          cend(),
-                                          i,
-                                          [] (auto& elem, auto& value) { return elem.getEnd() <= value; });
-
-        return it != cend() && it->getStart() <= i ? it : cend();
-    }
-
-    std::optional<size_t> getIndexForEnclosingRange (int64 positionInTextRange) const
-    {
-        const auto iter = find (positionInTextRange);
-        return iter != ranges.end() ? std::make_optional (getIndex (iter)) : std::nullopt;
-    }
-
-    /* Returns true if this object covers each element in the provided range. For empty ranges it
-       returns true if the start value is covered.
-    */
-    bool covers (Range<int64> range) const
-    {
-        for (auto curr = find (range.getStart()), prev = curr; curr != cend(); ++curr)
-        {
-            if (prev != curr && prev->getEnd() != curr->getStart())
-                return false;
-
-            if (range.getEnd() <= curr->getEnd())
-                return true;
-
-            prev = curr;
-        }
-
-        return false;
-    }
-
 private:
     size_t getIndex (std::vector<Range<int64>>::const_iterator it) const
     {
@@ -399,104 +391,18 @@ private:
 };
 
 //==============================================================================
+enum class MergeEqualItems
+{
+    no,
+    yes
+};
+
 template <typename T, typename = void>
 constexpr auto hasEqualityOperator = false;
 
 template <typename T>
 constexpr auto hasEqualityOperator<T, std::void_t<decltype (std::declval<T>() == std::declval<T>())>> = true;
 
-//==============================================================================
-template <typename T>
-struct RangedValuesIteratorItem
-{
-    Range<int64> range;
-    T& value;
-};
-
-//==============================================================================
-template <typename T>
-class RangedValuesIterator
-{
-private:
-    using InternalIterator = const Range<int64>*;
-
-public:
-    using value_type = RangedValuesIteratorItem<T>;
-    using difference_type = std::ptrdiff_t;
-    using reference = value_type;
-
-    struct PointerProxy
-    {
-        explicit PointerProxy (reference r) : ref { r } {}
-
-        auto operator->() const { return &ref; }
-
-        reference ref;
-    };
-
-    using pointer = PointerProxy;
-    using iterator_category = std::random_access_iterator_tag;
-
-    RangedValuesIterator (T* valuesIn, InternalIterator iteratorBaseIn, InternalIterator iteratorIn)
-        : values { valuesIn },
-          iteratorBase { iteratorBaseIn },
-          iterator { iteratorIn }
-    {}
-
-    RangedValuesIterator& operator+= (difference_type distance)
-    {
-        iterator += distance;
-        return *this;
-    }
-
-    friend RangedValuesIterator operator+ (RangedValuesIterator i, difference_type d) { return i += d; }
-    friend RangedValuesIterator operator+ (difference_type d, RangedValuesIterator i) { return i += d; }
-
-    RangedValuesIterator& operator-= (difference_type distance)
-    {
-        iterator -= distance;
-        return *this;
-    }
-
-    friend RangedValuesIterator operator- (RangedValuesIterator i, difference_type d) { return i -= d; }
-
-    reference operator[] (difference_type d) const
-    {
-        auto it = iterator[d];
-        return makeReference (it);
-    }
-
-    friend difference_type operator- (RangedValuesIterator a, RangedValuesIterator b)   { return a.iterator - b.iterator; }
-
-    friend bool operator<  (RangedValuesIterator a, RangedValuesIterator b) { return a.iterator <  b.iterator; }
-    friend bool operator<= (RangedValuesIterator a, RangedValuesIterator b) { return a.iterator <= b.iterator; }
-    friend bool operator>  (RangedValuesIterator a, RangedValuesIterator b) { return a.iterator >  b.iterator; }
-    friend bool operator>= (RangedValuesIterator a, RangedValuesIterator b) { return a.iterator >= b.iterator; }
-    friend bool operator== (RangedValuesIterator a, RangedValuesIterator b) { return a.iterator == b.iterator; }
-    friend bool operator!= (RangedValuesIterator a, RangedValuesIterator b) { return a.iterator != b.iterator; }
-
-    RangedValuesIterator& operator++()           { ++iterator; return *this; }
-    RangedValuesIterator& operator--()           { --iterator; return *this; }
-    RangedValuesIterator  operator++ (int) const { RangedValuesIterator copy (*this); ++(*this); return copy; }
-    RangedValuesIterator  operator-- (int) const { RangedValuesIterator copy (*this); --(*this); return copy; }
-
-    reference operator* () const { return makeReference (iterator); }
-    pointer   operator->() const { return PointerProxy { makeReference (iterator) }; }
-
-private:
-    reference makeReference (const InternalIterator& it) const
-    {
-        const auto valueIt = values + (size_t) std::distance (iteratorBase, it);
-
-        return { *it, *valueIt };
-    }
-
-    T* values{};
-    InternalIterator iteratorBase, iterator;
-};
-
-struct MergeEqualItemsYes{};
-struct MergeEqualItemsNo{};
 
 /*  Data structure for storing values associated with non-overlapping ranges.
 
@@ -522,50 +428,121 @@ class RangedValues
         return j ? std::make_optional (self.getItem (*j)) : std::nullopt;
     }
 
-    auto tie() const { return std::tie (ranges, values); }
-
 public:
     static constexpr bool canMergeEqualItems = hasEqualityOperator<T>;
 
     template <typename RangedValuesType>
-    static auto makeIterator (RangedValuesType* rv, const Range<int64>* base, const Range<int64>* iterator)
+    class RangedValuesIterator
     {
-        return RangedValuesIterator<std::remove_pointer_t<decltype (rv->values.data())>> (rv->values.data(), base, iterator);
-    }
+    private:
+        using InternalIterator = decltype (std::declval<RangedValuesType>().ranges.cbegin());
 
-    //==============================================================================
-    bool operator== (const RangedValues& other) const { return tie() == other.tie(); }
-    bool operator!= (const RangedValues& other) const { return tie() != other.tie(); }
+    public:
+        using value_type = std::pair<Range<int64>, T>;
+        using difference_type = typename std::iterator_traits<typename std::vector<T>::iterator>::difference_type;
+        using reference = decltype (std::declval<RangedValuesType>().getItem (0));
+
+        struct PointerProxy
+        {
+            PointerProxy (reference r) : ref { r } {}
+
+            auto operator->() const { return &ref; }
+
+            reference ref;
+        };
+
+        using pointer = PointerProxy;
+        using iterator_category = std::random_access_iterator_tag;
+
+        RangedValuesIterator (RangedValuesType* ownerIn, InternalIterator iteratorIn)
+            : owner { ownerIn },
+              iterator { iteratorIn }
+        {}
+
+        RangedValuesIterator& operator+= (difference_type distance)
+        {
+            iterator += distance;
+            return *this;
+        }
+
+        friend RangedValuesIterator operator+ (RangedValuesIterator i, difference_type d) { return i += d; }
+        friend RangedValuesIterator operator+ (difference_type d, RangedValuesIterator i) { return i += d; }
+
+        RangedValuesIterator& operator-= (difference_type distance)
+        {
+            iterator -= distance;
+            return *this;
+        }
+
+        friend RangedValuesIterator operator- (RangedValuesIterator i, difference_type d) { return i -= d; }
+
+        reference makeReference (const InternalIterator& it) const
+        {
+            const auto valueIt = iteratorWithAdvance (owner->values.begin(), std::distance (owner->ranges.cbegin(), it));
+
+            return { *it, *valueIt };
+        }
+
+        reference operator[] (difference_type d) const
+        {
+            auto it = iterator[d];
+            return makeReference (it);
+        }
+
+        friend difference_type operator- (RangedValuesIterator a, RangedValuesIterator b)   { return a.iterator - b.iterator; }
+
+        friend bool operator<  (RangedValuesIterator a, RangedValuesIterator b) { return a.iterator <  b.iterator; }
+        friend bool operator<= (RangedValuesIterator a, RangedValuesIterator b) { return a.iterator <= b.iterator; }
+        friend bool operator>  (RangedValuesIterator a, RangedValuesIterator b) { return a.iterator >  b.iterator; }
+        friend bool operator>= (RangedValuesIterator a, RangedValuesIterator b) { return a.iterator >= b.iterator; }
+        friend bool operator== (RangedValuesIterator a, RangedValuesIterator b) { return a.iterator == b.iterator; }
+        friend bool operator!= (RangedValuesIterator a, RangedValuesIterator b) { return a.iterator != b.iterator; }
+
+        RangedValuesIterator& operator++()           { ++iterator; return *this; }
+        RangedValuesIterator& operator--()           { --iterator; return *this; }
+        RangedValuesIterator  operator++ (int) const { RangedValuesIterator copy (*this); ++(*this); return copy; }
+        RangedValuesIterator  operator-- (int) const { RangedValuesIterator copy (*this); --(*this); return copy; }
+
+        reference operator* () const { return makeReference (iterator); }
+        pointer   operator->() const { return PointerProxy { makeReference (iterator) }; }
+
+    private:
+        RangedValuesType* owner{};
+        InternalIterator iterator;
+    };
+
+    template <typename X, typename Y>
+    static auto makeIterator (X* x, Y y) { return RangedValuesIterator<X> (x, y); }
 
     //==============================================================================
     auto begin()
     {
-        return makeIterator (this, ranges.data(), ranges.data());
+        return makeIterator (this, ranges.cbegin());
     }
 
     auto begin() const
     {
-        return makeIterator (this, ranges.data(), ranges.data());
+        return makeIterator (this, ranges.cbegin());
     }
 
     auto cbegin() const
     {
-        return makeIterator (this, ranges.data(), ranges.data());
+        return makeIterator (this, ranges.cbegin());
     }
 
     auto end()
     {
-        return makeIterator (this, ranges.data(), ranges.data() + ranges.size());
+        return makeIterator (this, ranges.cend());
     }
 
     auto end() const
     {
-        return makeIterator (this, ranges.data(), ranges.data() + ranges.size());
+        return makeIterator (this, ranges.cend());
     }
 
     auto cend() const
     {
-        return makeIterator (this, ranges.data(), ranges.data() + ranges.size());
+        return makeIterator (this, ranges.cend());
     }
 
     struct Item
@@ -580,84 +557,70 @@ public:
         const T& value;
     };
 
-    template <typename U>
-    static auto createSubSpan (U& s, size_t offset)
-    {
-        Span span { s };
-
-        if (span.empty())
-            return span;
-
-        const auto newSize = s.size() - std::min (s.size(), offset);
-
-        if (newSize == 0)
-            return decltype (span){};
-
-        auto start = s.begin();
-        std::advance (start, static_cast<typename U::difference_type> (offset));
-
-        return Span { start, newSize };
-    }
-
     //==============================================================================
     // Basic operations
-    template <typename MergeEquals = MergeEqualItemsYes>
-    void set (Range<int64> r, T v, Ranges::Operations& ops, MergeEquals = {})
+    template <MergeEqualItems mergeEquals = MergeEqualItems::yes>
+    auto set (Range<int64> r, T v)
     {
-        static_assert (std::is_same_v<MergeEqualItemsNo, MergeEquals> || canMergeEqualItems,
+        static_assert (mergeEquals == MergeEqualItems::no || canMergeEqualItems,
                        "You can't use MergeEqualItems::yes if your type doesn't have operator==.");
 
-        const auto opsStart = ops.size();
-        ranges.set (r, ops);
-        applyOperations (createSubSpan (ops, opsStart), std::move (v));
+        Ranges::Operations ops;
 
-        if constexpr (std::is_same_v<MergeEquals, MergeEqualItemsYes>)
+        ops = Ranges::withOperationsFrom (ops, ranges.set (r));
+        applyOperations (ops, std::move (v));
+
+        if constexpr (mergeEquals == MergeEqualItems::yes)
         {
-            mergeEqualItems (r.getStart(), ops);
-            mergeEqualItems (r.getEnd(), ops);
+            ops = Ranges::withOperationsFrom (ops, mergeEqualItems (r.getStart()));
+            ops = Ranges::withOperationsFrom (ops, mergeEqualItems (r.getEnd()));
         }
+
+        return ops;
     }
 
-    template <typename MergeEquals = MergeEqualItemsYes>
-    void insert (Range<int64> r, T v, Ranges::Operations& ops, MergeEquals = {})
+    template <MergeEqualItems mergeEquals = MergeEqualItems::yes>
+    auto insert (Range<int64> r, T v)
     {
-        static_assert (std::is_same_v<MergeEquals, MergeEqualItemsNo> || canMergeEqualItems,
+        static_assert (mergeEquals == MergeEqualItems::no || canMergeEqualItems,
                        "You can't use MergeEqualItems::yes if your type doesn't have operator==.");
 
-        const auto opsStart = ops.size();
-        ranges.insert (r, ops);
-        applyOperations (createSubSpan (ops, opsStart), std::move (v));
+        auto ops = ranges.insert (r);
+        applyOperations (ops, std::move (v));
 
-        if constexpr (std::is_same_v<MergeEquals, MergeEqualItemsYes>)
+        if constexpr (mergeEquals == MergeEqualItems::yes)
         {
-            mergeEqualItems (r.getStart(), ops);
-            mergeEqualItems (r.getEnd(), ops);
+            ops = Ranges::withOperationsFrom (ops, mergeEqualItems (r.getStart()));
+            ops = Ranges::withOperationsFrom (ops, mergeEqualItems (r.getEnd()));
         }
+
+        return ops;
     }
 
     // erase will always cause a discontinuity and thus, there is no opportunity to merge
-    void erase (Range<int64> r, Ranges::Operations& ops)
+    auto erase (Range<int64> r)
     {
-        const auto opsStart = ops.size();
-        ranges.erase (r, ops);
-        applyOperations (createSubSpan (ops, opsStart));
+        auto ops = ranges.erase (r);
+        applyOperations (ops);
+        return ops;
     }
 
     // drop moves subsequent ranges downward, and can end up in these ranges forming a contiguous
     // range with the ones on the left side of the drop. Hence, it makes sense to ask if we want
     // merging behaviour.
-    template <typename MergeEquals = MergeEqualItemsYes>
-    void drop (Range<int64> r, Ranges::Operations& ops, MergeEquals = {})
+    template <MergeEqualItems mergeEquals = MergeEqualItems::yes>
+    auto drop (Range<int64> r)
     {
-        static_assert (std::is_same_v<MergeEquals, MergeEqualItemsNo> || canMergeEqualItems,
+        static_assert (mergeEquals == MergeEqualItems::no || canMergeEqualItems,
                        "You can't use MergeEqualItems::yes if your type doesn't have operator==.");
 
-        const auto opsStart = ops.size();
-        ranges.drop (r, ops);
-        applyOperations (createSubSpan (ops, opsStart));
+        auto ops = ranges.drop (r);
+        applyOperations (ops);
 
-        if constexpr (std::is_same_v<MergeEquals, MergeEqualItemsYes>)
-            mergeEqualItems (r.getStart(), ops);
+        if constexpr (mergeEquals == MergeEqualItems::yes)
+            ops = Ranges::withOperationsFrom (ops, mergeEqualItems (r.getStart()));
+
+        return ops;
     }
 
     //==============================================================================
@@ -667,25 +630,27 @@ public:
         values.clear();
     }
 
-    void shift (int64 from, int64 amount, Ranges::Operations& ops)
-    {
-        ranges.shift (from, amount, ops);
-    }
-
-    void eraseFrom (int64 i, Ranges::Operations& ops)
+    Ranges::Operations eraseFrom (int64 i)
     {
         if (ranges.isEmpty())
-            return;
+            return {};
 
-        erase ({ i, ranges.get (ranges.size() - 1).getEnd() }, ops);
+        return erase ({ i, ranges.get (ranges.size() - 1).getEnd() });
     }
 
-    void eraseUpTo (int64 i, Ranges::Operations& ops)
+    /** Create a RangedValues object from non-overlapping ranges. */
+    template<MergeEqualItems mergeEquals, typename Iterable>
+    auto setForEach (Iterable begin, Iterable end)
     {
-        if (ranges.isEmpty())
-            return;
+        Ranges::Operations ops;
 
-        erase ({ ranges.get (0).getStart(), i }, ops);
+        for (auto it = begin; it != end; ++it)
+        {
+            const auto& [range, value] = *it;
+            ops = Ranges::withOperationsFrom (ops, set<mergeEquals> (range, value));
+        }
+
+        return ops;
     }
 
     auto getItemWithEnclosingRange (int64 i)
@@ -697,17 +662,6 @@ public:
     {
         return getItemWithEnclosingRangeImpl (*this, i);
     }
-
-    // Finds the item whose range encloses the provided value
-    template <typename Self>
-    static auto findImpl (Self& self, int64 i)
-    {
-        return iteratorWithAdvance (self.begin(),
-                                    std::distance (self.ranges.cbegin(), self.ranges.find (i)));
-    }
-
-    auto find (int64 i) { return findImpl (*this, i); }
-    auto find (int64 i) const { return findImpl (*this, i); }
 
     Item getItem (size_t i)
     {
@@ -750,30 +704,20 @@ public:
     /*  Returns the stored values together with the overlapping range, that overlap with the
         provided range.
     */
-    RangedValues<T> getIntersectionsWith (Range<int64> r) const
+    std::vector<ConstItem> getIntersectionsWith (Range<int64> r) const
     {
         const auto intersections = ranges.getIntersectionsWith (r);
 
-        RangedValues<T> result;
-
-        detail::Ranges::Operations ops;
+        std::vector<ConstItem> result;
+        result.reserve (intersections.size());
 
         for (const auto& is : intersections)
         {
             auto valueIndex = ranges.getIndexForEnclosingRange (is.getStart());
             jassert (valueIndex.has_value());
-            result.set (is, values[*valueIndex], ops, MergeEqualItemsNo{});
-            ops.clear();
+            result.push_back ({ is, values[*valueIndex] });
         }
 
-        return result;
-    }
-
-    RangedValues<T> getIntersectionsStartingAtZeroWith (Range<int64> r) const
-    {
-        detail::Ranges::Operations ops;
-        auto result = getIntersectionsWith (r);
-        result.drop ({ (int64) 0, r.getStart() }, ops);
         return result;
     }
 
@@ -790,22 +734,23 @@ public:
     }
 
 private:
-    void mergeEqualItems (int64 i, Ranges::Operations& ops)
+    Ranges::Operations mergeEqualItems (int64 i)
     {
         const auto endOpt = ranges.getIndexForEnclosingRange (i);
 
         if (! endOpt.has_value() || *endOpt == 0)
-            return;
+            return {};
 
         const auto end = *endOpt;
         const auto start = end - 1;
 
         if (! exactlyEqual (values[start], values[end]))
-            return;
+            return {};
 
-        const auto opsStart = ops.size();
-        ranges.mergeBack (end, ops);
-        applyOperations (createSubSpan (ops, opsStart));
+        const auto ops = ranges.mergeBack (end);
+        applyOperations (ops);
+
+        return ops;
     }
 
     void applyOperation (const Ranges::Op& op)
@@ -841,13 +786,13 @@ private:
         }
     }
 
-    void applyOperations (Span<const Ranges::Op> ops)
+    void applyOperations (const Ranges::Operations& ops)
     {
         for (const auto& op : ops)
             applyOperation (op);
     }
 
-    void applyOperations (Span<const Ranges::Op> ops, T v)
+    void applyOperations (const Ranges::Operations& ops, T v)
     {
         for (const auto& op : ops)
             applyOperation (op, v);
@@ -875,9 +820,12 @@ template <typename T>
 class RangedIteratorWrapper final : public RangedIterator
 {
 public:
-    RangedIteratorWrapper (RangedValuesIterator<T> iteratorIn, RangedValuesIterator<T> endIn)
-        : iterator { std::move (iteratorIn) },
-          end { std::move (endIn) }
+    /*  We pass a pointer rather than a reference here to make it clearer that the pointed-to object
+        must outlive the RangedIteratorWrapper, otherwise the wrapped iterators will dangle.
+    */
+    explicit RangedIteratorWrapper (const RangedValues<T>* rv)
+        : iterator { rv->cbegin() },
+          end { rv->cend() }
     {}
 
     //==============================================================================
@@ -889,14 +837,11 @@ public:
     const T& getValue() const { return iterator->value; }
 
 private:
-    RangedValuesIterator<T> iterator, end;
+    decltype (std::declval<const RangedValues<T>&>().cbegin()) iterator, end;
 };
 
-template <typename Iterable>
-[[nodiscard]] auto makeRangedIteratorWrapper (Iterable* iterable)
-{
-    return RangedIteratorWrapper { iterable->begin(), iterable->end() };
-}
+template <typename... Values>
+class IntersectingRangedValues;
 
 /*  A wrapper type encapsulating multiple RangedValues objects and providing iterator support.
 
@@ -924,30 +869,36 @@ template <typename Iterable>
     @endcode
 */
 template <typename... Values>
-class IntersectingRangedValues
+class IntersectingRangedValues<RangedValues<Values>...>
 {
-public:
-    static_assert (sizeof... (Values) > 0, "IntersectingRangedValues() must wrap at least one RangedValues object");
+private:
+    static_assert (sizeof...(Values) > 0, "IntersectingRangedValues() must wrap at least one RangedValues object");
 
+    static auto createIteratorWrappers (const RangedValues<Values>*... containers)
+    {
+        return std::make_tuple (RangedIteratorWrapper { containers }...);
+    }
+
+public:
     /*  This constructor takes a pointer rather than a reference to make it clearer that the pointed-to
         objects must outlive the IntersectingRangedValues instance. Passing a pointer also makes
         it harder to accidentally reference a temporary when constructing IntersectingRangedValues.
     */
-    explicit IntersectingRangedValues (RangedIteratorWrapper<Values>... wrappers)
-        : iteratorWrappers { wrappers... }
+    explicit IntersectingRangedValues (const RangedValues<Values>*... t)
+        : items { t... }
     {
     }
 
     struct IntersectionIteratorSentinel {};
-
-    using IteratorWrappersType = std::tuple<RangedIteratorWrapper<Values>...>;
 
     struct IntersectionIterator
     {
         using reference  = std::tuple<Range<int64>, const Values&...>;
         using iterator_category = std::forward_iterator_tag;
 
-        explicit IntersectionIterator (IteratorWrappersType wrappers)
+        using IteratorWrappersType = decltype (createIteratorWrappers (std::declval<const RangedValues<Values>*>()...));
+
+        explicit IntersectionIterator (IteratorWrappersType&& wrappers)
             : iteratorWrappers { std::move (wrappers) }
         {
             std::apply ([this] (auto&&... args)
@@ -1034,7 +985,11 @@ public:
 
     auto begin() const
     {
-        return IntersectionIterator { iteratorWrappers };
+        auto wrappers = std::apply ([] (auto&&... args)
+                                    { return createIteratorWrappers (std::forward<decltype (args)> (args)...); },
+                                    items);
+
+        return IntersectionIterator { std::move (wrappers) };
     }
 
     auto end() const
@@ -1043,17 +998,17 @@ public:
     }
 
 private:
-    IteratorWrappersType iteratorWrappers;
+    std::tuple<const RangedValues<Values>*...> items;
 };
 
 /*  See IntersectingRangedValues.
 */
-template <typename... Iterables>
-[[nodiscard]] auto makeIntersectingRangedValues (Iterables*... iterables)
+template <typename... Values>
+[[nodiscard]] auto makeIntersectingRangedValues (const RangedValues<Values>*... rvs)
 {
-    static_assert (sizeof...(Iterables) > 0, "makeIntersectingRangedValues() requires at least one parameter");
+    static_assert (sizeof...(Values) > 0, "makeIntersectingRangedValues() requires at least one parameter");
 
-    return IntersectingRangedValues (makeRangedIteratorWrapper (iterables)...);
+    return IntersectingRangedValues<RangedValues<Values>...> { rvs... };
 }
 
 } // namespace juce::detail

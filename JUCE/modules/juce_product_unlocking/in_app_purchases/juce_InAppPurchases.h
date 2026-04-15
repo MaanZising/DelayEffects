@@ -49,9 +49,9 @@ namespace juce
 class JUCE_API  InAppPurchases  : private DeletedAtShutdown
 {
 public:
-     /** @cond */
+    #ifndef DOXYGEN
      JUCE_DECLARE_SINGLETON_INLINE (InAppPurchases, false)
-     /** @endcond */
+    #endif
 
     //==============================================================================
     /** Represents a product available in the store. */
@@ -265,7 +265,7 @@ public:
     void cancelDownloads (const Array<Download*>& downloads);
 
     //==============================================================================
-    /** @cond */
+   #ifndef DOXYGEN
     [[deprecated ("On Android, it is no longer necessary to specify whether the product being purchased is a subscription "
                   "and only a single subscription can be upgraded/downgraded. Use the updated purchaseProduct method "
                   "which takes a single String argument.")]]
@@ -278,14 +278,14 @@ public:
                          upgradeOrDowngradeFromSubscriptionsWithProductIdentifiers[0],
                          creditForUnusedSubscription);
     }
-    /** @endcond */
+   #endif
 
 private:
     //==============================================================================
-    /** @cond */
+   #ifndef DOXYGEN
     InAppPurchases();
     ~InAppPurchases();
-    /** @endcond */
+   #endif
 
     //==============================================================================
     ListenerList<Listener> listeners;

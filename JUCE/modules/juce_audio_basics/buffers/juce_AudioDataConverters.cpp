@@ -35,7 +35,8 @@
 namespace juce
 {
 
-JUCE_BEGIN_IGNORE_DEPRECATION_WARNINGS
+JUCE_BEGIN_IGNORE_WARNINGS_GCC_LIKE ("-Wdeprecated-declarations")
+JUCE_BEGIN_IGNORE_WARNINGS_MSVC (4996)
 
 void AudioDataConverters::convertFloatToInt16LE (const float* source, void* dest, int numSamples, int destBytesPerSample)
 {
@@ -640,6 +641,7 @@ static AudioConversionTests audioConversionUnitTests;
 
 #endif
 
-JUCE_END_IGNORE_DEPRECATION_WARNINGS
+JUCE_END_IGNORE_WARNINGS_MSVC
+JUCE_END_IGNORE_WARNINGS_GCC_LIKE
 
 } // namespace juce

@@ -204,11 +204,11 @@ public:
     */
     NoteAndVelocity getNoteAndVelocityAtPosition (Point<float> position, bool includeChildComponents = false);
 
-    /** @cond */
+   #ifndef DOXYGEN
     /** Returns the key at a given coordinate, or -1 if the position does not intersect a key. */
     [[deprecated ("This method has been deprecated in favour of getNoteAndVelocityAtPosition.")]]
     int getNoteAtPosition (Point<float> p)  { return getNoteAndVelocityAtPosition (p).note; }
-    /** @endcond */
+   #endif
 
     /** Returns the rectangle for a given key. */
     Rectangle<float> getRectangleForKey (int midiNoteNumber) const;

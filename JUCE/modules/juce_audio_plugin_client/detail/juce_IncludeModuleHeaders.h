@@ -35,7 +35,6 @@
 #pragma once
 
 #include <juce_audio_plugin_client/juce_audio_plugin_client.h>
-#include <juce_audio_processors/juce_audio_processors.h>
 
 #define Component juce::Component
 

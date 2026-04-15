@@ -36,7 +36,6 @@ namespace juce
 {
 
 class AudioProcessorEditorListener;
-class AudioProcessor;
 
 //==============================================================================
 /**

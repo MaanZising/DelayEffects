@@ -343,9 +343,9 @@ private:
         Components components;
     };
 }
-/** @cond */
-JUCE_PACKED
-/** @endcond */
+#ifndef DOXYGEN
+ JUCE_PACKED
+#endif
 ;
 
 
@@ -556,7 +556,7 @@ public:
 
     //==============================================================================
     /** The indexes of the different components in the byte layout of this type of colour. */
-   #if JUCE_MAC || JUCE_IOS
+   #if JUCE_MAC
     enum { indexR = 0, indexG = 1, indexB = 2 };
    #else
     enum { indexR = 2, indexG = 1, indexB = 0 };
@@ -578,16 +578,16 @@ private:
     }
 
     //==============================================================================
-   #if JUCE_MAC || JUCE_IOS
+   #if JUCE_MAC
     uint8 r, g, b;
    #else
     uint8 b, g, r;
    #endif
 
 }
-/** @cond */
-JUCE_PACKED
-/** @endcond */
+#ifndef DOXYGEN
+ JUCE_PACKED
+#endif
 ;
 
 forcedinline void PixelARGB::blend (PixelRGB src) noexcept
@@ -737,9 +737,9 @@ private:
     //==============================================================================
     uint8 a;
 }
-/** @cond */
+#ifndef DOXYGEN
  JUCE_PACKED
-/** @endcond */
+#endif
 ;
 
 #if JUCE_MSVC

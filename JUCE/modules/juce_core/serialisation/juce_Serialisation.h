@@ -148,7 +148,8 @@ template <typename T> constexpr auto serialisationSize (const T& t) -> std::enab
     The following are specialisations of SerialisationTraits for commonly-used types.
 */
 
-/** @cond */
+#ifndef DOXYGEN
+
 template <typename... Ts>
 struct SerialisationTraits<std::vector<Ts...>>
 {
@@ -582,6 +583,6 @@ namespace detail
     }
 } // namespace detail
 
-/** @endcond */
+#endif
 
 } // namespace juce

@@ -1168,6 +1168,7 @@ private:
     static MUID getReallyRandomMuid()
     {
         Random random;
+        random.setSeedRandomly();
         return MUID::makeRandom (random);
     }
 

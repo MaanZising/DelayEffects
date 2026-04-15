@@ -78,8 +78,6 @@ public:
         MacOS_12        = MacOSX | 17,
         MacOS_13        = MacOSX | 18,
         MacOS_14        = MacOSX | 19,
-        MacOS_15        = MacOSX | 20,
-        MacOS_26        = MacOSX | 21,
 
         Win2000         = Windows | 1,
         WinXP           = Windows | 2,
@@ -294,10 +292,10 @@ public:
    #endif
 
     //==============================================================================
-    /** @cond */
+   #ifndef DOXYGEN
     [[deprecated ("This method was spelt wrong! Please change your code to use getCpuSpeedInMegahertz instead.")]]
     static int getCpuSpeedInMegaherz() { return getCpuSpeedInMegahertz(); }
-    /** @endcond */
+   #endif
 
 private:
     SystemStats() = delete; // uses only static methods

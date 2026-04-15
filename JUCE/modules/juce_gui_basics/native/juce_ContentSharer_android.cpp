@@ -191,10 +191,10 @@ public:
             // numOpenedHandles may get negative if we don't receive open handle event.
             if (fileWasRead && numOpenedHandles <= 0)
             {
-                MessageManager::callAsync ([fo = fileObserver, oc = onClose]
+                MessageManager::callAsync ([fileObserver = fileObserver, onClose = onClose]
                 {
-                    getEnv()->CallVoidMethod (fo, JuceContentProviderFileObserver.stopWatching);
-                    NullCheckedInvocation::invoke (oc);
+                    getEnv()->CallVoidMethod (fileObserver, JuceContentProviderFileObserver.stopWatching);
+                    NullCheckedInvocation::invoke (onClose);
                 });
             }
         }
@@ -370,6 +370,12 @@ private:
 
         const auto text = javaString ("Choose share target");
 
+        if (getAndroidSDKVersion() < 22)
+            return LocalRef<jobject> (env->CallStaticObjectMethod (AndroidIntent,
+                                                                   AndroidIntent.createChooser,
+                                                                   intent.get(),
+                                                                   text.get()));
+
         constexpr jint FLAG_UPDATE_CURRENT = 0x08000000;
         constexpr jint FLAG_IMMUTABLE = 0x04000000;
 
@@ -379,7 +385,7 @@ private:
         const LocalRef<jobject> replyIntent (env->NewObject (AndroidIntent, AndroidIntent.constructorWithContextAndClass, context.get(), klass));
         getEnv()->CallObjectMethod (replyIntent, AndroidIntent.putExtraInt, javaString ("com.rmsl.juce.JUCE_REQUEST_CODE").get(), request);
 
-        const auto flags = FLAG_UPDATE_CURRENT | FLAG_IMMUTABLE;
+        const auto flags = FLAG_UPDATE_CURRENT | (getAndroidSDKVersion() <= 23 ? 0 : FLAG_IMMUTABLE);
         const LocalRef<jobject> pendingIntent (env->CallStaticObjectMethod (AndroidPendingIntent,
                                                                             AndroidPendingIntent.getBroadcast,
                                                                             context.get(),
@@ -387,8 +393,8 @@ private:
                                                                             replyIntent.get(),
                                                                             flags));
 
-        return LocalRef<jobject> (env->CallStaticObjectMethod (AndroidIntent,
-                                                               AndroidIntent.createChooserWithSender,
+        return LocalRef<jobject> (env->CallStaticObjectMethod (AndroidIntent22,
+                                                               AndroidIntent22.createChooser,
                                                                intent.get(),
                                                                text.get(),
                                                                env->CallObjectMethod (pendingIntent,

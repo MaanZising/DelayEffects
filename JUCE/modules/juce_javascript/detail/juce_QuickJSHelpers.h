@@ -415,12 +415,6 @@ JUCE_BEGIN_IGNORE_WARNINGS_GCC_LIKE ("-Wsubobject-linkage")
 class QuickJSWrapper
 {
 public:
-    explicit QuickJSWrapper (const RelativeTime* maximumExecutionTimeIn)
-        : maximumExecutionTime { *maximumExecutionTimeIn }
-    {
-        qjs::JS_SetInterruptHandler (getQuickJSRuntime(), handleInterrupt, (void*) this);
-    }
-
     qjs::JSContext* getQuickJSContext() const
     {
         return impl->context;
@@ -431,26 +425,27 @@ public:
         return impl->runtime;
     }
 
-    void resetTimeout()
+    /*  Returning a value > 0 will interrupt the QuickJS engine.
+    */
+    void setInterruptHandler (std::function<int()> interruptHandlerIn)
     {
-        timeout = (int64) Time::getMillisecondCounterHiRes() + maximumExecutionTime.inMilliseconds();
-    }
-
-    void stop()
-    {
-        timeout = (int64) Time::getMillisecondCounterHiRes();
+        interruptHandler = std::move (interruptHandlerIn);
+        qjs::JS_SetInterruptHandler (getQuickJSRuntime(), handleInterrupt, (void*) this);
     }
 
 private:
     static int handleInterrupt (qjs::JSRuntime*, void* opaque)
     {
         auto& self = *static_cast<QuickJSWrapper*> (opaque);
-        return (int64) Time::getMillisecondCounterHiRes() >= self.timeout;
+
+        if (self.interruptHandler != nullptr)
+            return self.interruptHandler();
+
+        return 0;
     }
 
     std::unique_ptr<qjs::QuickJSContext> impl = std::make_unique<qjs::QuickJSContext>();
-    const RelativeTime& maximumExecutionTime;
-    std::atomic<int64> timeout{};
+    std::function<int()> interruptHandler;
 };
 JUCE_END_IGNORE_WARNINGS_GCC_LIKE
 

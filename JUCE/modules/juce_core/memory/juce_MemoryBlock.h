@@ -281,14 +281,14 @@ public:
     bool fromBase64Encoding  (StringRef encodedString);
 
     //==============================================================================
-    /** @cond */
+   #ifndef DOXYGEN
     [[deprecated ("Use the replaceAll method instead, which will also replace the data when numBytes == 0.")]]
     void replaceWith (const void* srcData, size_t numBytes)
     {
         if (numBytes > 0)
             replaceAll (srcData, numBytes);
     }
-    /** @endcond */
+   #endif
 
 private:
     //==============================================================================

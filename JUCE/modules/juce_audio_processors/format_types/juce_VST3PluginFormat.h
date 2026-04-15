@@ -52,7 +52,7 @@ public:
     ~VST3PluginFormat() override;
 
     //==============================================================================
-    /** @cond */
+   #ifndef DOXYGEN
     /** Attempts to reload a VST3 plugin's state from some preset file data.
 
         @see VSTPluginFormat::loadFromFXBFile
@@ -62,7 +62,7 @@ public:
                  "Then, call ExtensionsVisitor::VST3::setPreset() to set the state using the "
                  "contents of a vstpreset file.")]]
     static bool setStateFromVSTPresetFile (AudioPluginInstance*, const MemoryBlock&);
-    /** @endcond */
+   #endif
 
     //==============================================================================
     static String getFormatName()                   { return "VST3"; }

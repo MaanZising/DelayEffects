@@ -220,8 +220,7 @@ public:
                          int x, int y, int width, int height,
                          Justification justificationFlags,
                          int maximumNumberOfLines,
-                         float minimumHorizontalScale = 0.0f,
-                         GlyphArrangementOptions options = {}) const;
+                         float minimumHorizontalScale = 0.0f) const;
 
     /** Tries to draw a text string inside a given space.
 
@@ -246,8 +245,7 @@ public:
                          Rectangle<int> area,
                          Justification justificationFlags,
                          int maximumNumberOfLines,
-                         float minimumHorizontalScale = 0.0f,
-                         GlyphArrangementOptions options = {}) const;
+                         float minimumHorizontalScale = 0.0f) const;
 
     //==============================================================================
     /** Fills the context's entire clip region with the current colour or brush.
@@ -667,7 +665,7 @@ public:
         On construction, this calls Graphics::saveState(), and on destruction it calls
         Graphics::restoreState() on the Graphics object that you supply.
     */
-    class JUCE_API ScopedSaveState
+    class ScopedSaveState
     {
     public:
         ScopedSaveState (Graphics&);

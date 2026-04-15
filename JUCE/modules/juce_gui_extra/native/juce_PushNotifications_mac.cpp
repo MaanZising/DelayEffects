@@ -35,9 +35,7 @@
 namespace juce
 {
 
-#define JUCE_PUSH_NOTIFICATIONS_IMPL 1
-
-JUCE_BEGIN_IGNORE_DEPRECATION_WARNINGS
+JUCE_BEGIN_IGNORE_WARNINGS_GCC_LIKE ("-Wdeprecated-declarations")
 
 namespace PushNotificationsDelegateDetailsOsx
 {
@@ -345,9 +343,9 @@ private:
 bool PushNotifications::Notification::isValid() const noexcept { return true; }
 
 //==============================================================================
-struct PushNotifications::Impl : private PushNotificationsDelegate
+struct PushNotifications::Pimpl : private PushNotificationsDelegate
 {
-    explicit Impl (PushNotifications& p)
+    Pimpl (PushNotifications& p)
         : owner (p)
     {
     }
@@ -536,6 +534,6 @@ private:
     PushNotifications::Settings settings;
 };
 
-JUCE_END_IGNORE_DEPRECATION_WARNINGS
+JUCE_END_IGNORE_WARNINGS_GCC_LIKE
 
 } // namespace juce

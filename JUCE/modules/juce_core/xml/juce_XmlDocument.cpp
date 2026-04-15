@@ -474,7 +474,7 @@ XmlElement* XmlDocument::readNextElement (const bool alsoParseSubElements)
                         if (nextChar == '"' || nextChar == '\'')
                         {
                             auto* newAtt = new XmlElement::XmlAttributeNode (attNameStart, attNameEnd);
-                            readQuotedString (newAtt->attribute.value);
+                            readQuotedString (newAtt->value);
                             attributeAppender.append (newAtt);
                             continue;
                         }

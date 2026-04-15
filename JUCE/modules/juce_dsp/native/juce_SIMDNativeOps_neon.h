@@ -32,9 +32,10 @@
   ==============================================================================
 */
 
-/** @cond */
 namespace juce::dsp
 {
+
+#ifndef DOXYGEN
 
 JUCE_BEGIN_IGNORE_WARNINGS_GCC_LIKE ("-Wignored-attributes")
 
@@ -52,7 +53,7 @@ JUCE_BEGIN_IGNORE_WARNINGS_GCC_LIKE ("-Wignored-attributes")
  #define DEFINE_NEON_SIMD_CONST(type, class_type, name) \
     const type SIMDNativeOps<class_type>:: name [16 / sizeof (type)] __attribute__ ((aligned (16)))
 
-#endif // _MSC_VER
+#endif
 
 template <typename type>
 struct SIMDNativeOps;
@@ -540,8 +541,8 @@ struct SIMDNativeOps<double>
     static forcedinline vSIMDType truncate (vSIMDType a) noexcept                              { return fb::truncate (a); }
 };
 #endif // JUCE_64BIT
+#endif // #ifndef DOXYGEN
 
 JUCE_END_IGNORE_WARNINGS_GCC_LIKE
 
 } // namespace juce::dsp
-/** @endcond */

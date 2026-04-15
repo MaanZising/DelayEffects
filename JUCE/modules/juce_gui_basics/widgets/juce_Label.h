@@ -89,15 +89,13 @@ public:
 
     //==============================================================================
     /** Changes the font to use to draw the text.
-        Note that when drawing, the label's LookAndFeel may override the font set here.
-        @see getFont, LookAndFeelMethods
+        @see getFont
     */
     void setFont (const Font& newFont);
 
-    /** Returns the Label's current font.
-        Note that this method will always return the font set by setFont(), even if
-        the LookAndFeel is overriding the label's font during drawing.
-        @see setFont, LookAndFeelMethods
+    /** Returns the font currently being used.
+        This may be the one set by setFont(), unless it has been overridden by the current LookAndFeel
+        @see setFont
     */
     Font getFont() const noexcept;
 

@@ -431,7 +431,7 @@ bool JUCE_CALLTYPE Process::openDocument (const String& fileName, [[maybe_unused
                 return true;
             }
 
-            JUCE_BEGIN_IGNORE_DEPRECATION_WARNINGS
+            JUCE_BEGIN_IGNORE_WARNINGS_GCC_LIKE ("-Wdeprecated-declarations")
 
             NSMutableDictionary* dict = [[NSMutableDictionary new] autorelease];
 
@@ -443,7 +443,7 @@ bool JUCE_CALLTYPE Process::openDocument (const String& fileName, [[maybe_unused
                                        configuration: dict
                                                error: nil];
 
-            JUCE_END_IGNORE_DEPRECATION_WARNINGS
+            JUCE_END_IGNORE_WARNINGS_GCC_LIKE
         }
 
         if (file.exists())

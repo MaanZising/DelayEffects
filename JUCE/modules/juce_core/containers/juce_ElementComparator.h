@@ -35,7 +35,8 @@
 namespace juce
 {
 
-/** @cond */
+#ifndef DOXYGEN
+
 /** This is an internal helper class which converts a juce ElementComparator style
     class (using a "compareElements" method) into a class that's compatible with
     std::sort (i.e. using an operator() to compare the elements)
@@ -56,7 +57,8 @@ private:
 
     SortFunctionConverter& operator= (const SortFunctionConverter&) = delete;
 };
-/** @endcond */
+
+#endif
 
 
 //==============================================================================

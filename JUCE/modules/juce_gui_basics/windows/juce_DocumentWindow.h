@@ -271,7 +271,7 @@ public:
     };
 
     //==============================================================================
-    /** @cond */
+   #ifndef DOXYGEN
     /** @internal */
     void paint (Graphics&) override;
     /** @internal */
@@ -300,7 +300,7 @@ public:
     void windowControlClickedMinimise() override;
     /** @internal */
     void windowControlClickedMaximise() override;
-    /** @endcond */
+   #endif
 
 private:
     //==============================================================================

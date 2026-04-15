@@ -213,9 +213,6 @@ public:
         const ScopedLock lock;
     };
 
-    void addListener (NativeContextListener&) {}
-    void removeListener (NativeContextListener&) {}
-
 private:
     CriticalSection mutex;
     Component& component;

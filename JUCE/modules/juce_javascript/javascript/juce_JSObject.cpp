@@ -41,7 +41,7 @@ class JSObject::Impl
 public:
     using ValuePtr = detail::qjs::QuickJSContext::ValuePtr;
 
-    explicit Impl (detail::QuickJSWrapper* engineIn)
+    explicit Impl (const detail::QuickJSWrapper* engineIn)
         : Impl (engineIn,
                 { detail::qjs::JS_GetGlobalObject (engineIn->getQuickJSContext()), engineIn->getQuickJSContext() })
     {
@@ -99,8 +99,6 @@ public:
 
     detail::VarOrError invokeMethod (const Identifier& methodName, Span<const var> args) const
     {
-        engine->resetTimeout();
-
         if (! hasProperty (methodName))
         {
             jassertfalse;
@@ -170,17 +168,17 @@ public:
     }
 
 private:
-    Impl (detail::QuickJSWrapper* e, ValuePtr&& ptr)
+    Impl (const detail::QuickJSWrapper* e, ValuePtr&& ptr)
         : engine (e), valuePtr (std::move (ptr))
     {
     }
 
-    detail::QuickJSWrapper* engine = nullptr;
+    const detail::QuickJSWrapper* engine = nullptr;
     ValuePtr valuePtr;
 };
 JUCE_END_IGNORE_WARNINGS_GCC_LIKE
 
-JSObject::JSObject (detail::QuickJSWrapper* engine)
+JSObject::JSObject (const detail::QuickJSWrapper* engine)
     : impl (new Impl (engine))
 {
 }

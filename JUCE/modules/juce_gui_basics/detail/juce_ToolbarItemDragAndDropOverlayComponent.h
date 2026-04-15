@@ -39,6 +39,7 @@ class ToolbarItemDragAndDropOverlayComponent    : public Component
 {
 public:
     ToolbarItemDragAndDropOverlayComponent()
+        : isDragging (false)
     {
         setAlwaysOnTop (true);
         setRepaintsOnMouseActivity (true);
@@ -113,7 +114,7 @@ public:
 
 private:
     //==============================================================================
-    bool isDragging = false;
+    bool isDragging;
 
     ToolbarItemComponent* getToolbarItemComponent() const noexcept
     {

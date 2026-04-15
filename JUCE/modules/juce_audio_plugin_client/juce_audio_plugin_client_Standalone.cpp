@@ -87,7 +87,7 @@ public:
     bool moreThanOneInstanceAllowed() override              { return true; }
     void anotherInstanceStarted (const String&) override    {}
 
-    StandaloneFilterWindow* createWindow()
+    virtual StandaloneFilterWindow* createWindow()
     {
         if (Desktop::getInstance().getDisplays().displays.isEmpty())
         {
@@ -101,7 +101,7 @@ public:
                                            createPluginHolder());
     }
 
-    std::unique_ptr<StandalonePluginHolder> createPluginHolder()
+    virtual std::unique_ptr<StandalonePluginHolder> createPluginHolder()
     {
         constexpr auto autoOpenMidiDevices =
        #if (JUCE_ANDROID || JUCE_IOS) && ! JUCE_DONT_AUTO_OPEN_MIDI_DEVICES_ON_MOBILE

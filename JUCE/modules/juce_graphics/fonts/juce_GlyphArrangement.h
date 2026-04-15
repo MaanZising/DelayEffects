@@ -73,8 +73,6 @@ public:
     float getBottom() const                     { return y + font.getDescent(); }
     /** Returns the bounds of the glyph. */
     Rectangle<float> getBounds() const          { return { x, getTop(), w, font.getHeight() }; }
-    /** Returns the typeface glyph index for the glyph. */
-    int getGlyphIndex() const                   { return glyph; }
 
     //==============================================================================
     /** Shifts the glyph's position by a relative amount. */
@@ -127,8 +125,6 @@ private:
 class JUCE_API  GlyphArrangement  final
 {
 public:
-    using Options = GlyphArrangementOptions;
-
     //==============================================================================
     /** Creates an empty arrangement. */
     GlyphArrangement();
@@ -228,8 +224,7 @@ public:
                         float x, float y, float width, float height,
                         Justification layout,
                         int maximumLinesToUse,
-                        float minimumHorizontalScale = 0.0f,
-                        GlyphArrangementOptions options = {});
+                        float minimumHorizontalScale = 0.0f);
 
     /** Appends another glyph arrangement to this one. */
     void addGlyphArrangement (const GlyphArrangement&);

@@ -35,6 +35,8 @@
 namespace juce
 {
 
+class AudioProcessor;
+
 //==============================================================================
 /** An abstract base class for parameter objects that can be added to an
     AudioProcessor.
@@ -171,7 +173,7 @@ public:
     /** Returns the number of steps that this parameter's range should be quantised into.
 
         If you want a continuous range of values, don't override this method, and allow
-        the default implementation to return getDefaultNumParameterSteps().
+        the default implementation to return AudioProcessor::getDefaultNumParameterSteps().
 
         If your parameter is boolean, then you may want to make this return 2.
 
@@ -260,12 +262,6 @@ public:
     /** Returns the index of this parameter in its parent processor's parameter list. */
     int getParameterIndex() const noexcept              { return parameterIndex; }
 
-    /** @internal
-        This should only be called by the owner of the parameter after it has been added to
-        a processor. Do not call this function; changing the parameter index *will* break things!
-    */
-    void setParameterIndex (int) noexcept;
-
     //==============================================================================
     /** Returns the current value of the parameter as a String.
 
@@ -336,12 +332,6 @@ public:
         virtual void parameterGestureChanged (int parameterIndex, bool gestureIsStarting) = 0;
     };
 
-    /** @internal
-        This should only be called by the owner of the parameter after it has been added to
-        a processor. Do not call this function; changing the owner *will* break things!
-    */
-    void setOwner (Listener* listener) noexcept;
-
     /** Registers a listener to receive events when the parameter's state changes.
         If the listener is already registered, this will not register it again.
 
@@ -359,22 +349,15 @@ public:
     /** @internal */
     void sendValueChangedMessageToListeners (float newValue);
 
-    /** Returns the default number of steps for a parameter.
-
-        NOTE! This method is deprecated! It's recommended that you use
-        AudioProcessorParameter::getNumSteps() instead.
-
-        @see getParameterNumSteps
-    */
-    static int getDefaultNumParameterSteps() noexcept;
-
 private:
     //==============================================================================
+    friend class AudioProcessor;
+    friend class LegacyAudioParameter;
+    AudioProcessor* processor = nullptr;
     int parameterIndex = -1;
     int version = 0;
     CriticalSection listenerLock;
     Array<Listener*> listeners;
-    Listener* finalListener = nullptr;
     mutable StringArray valueStrings;
 
    #if JUCE_DEBUG

@@ -277,20 +277,20 @@ void NamedValueSet::setFromXmlAttributes (const XmlElement& xml)
 {
     values.clearQuick();
 
-    for (const auto& [name, value] : xml.getAttributeIterator())
+    for (auto* att = xml.attributes.get(); att != nullptr; att = att->nextListItem)
     {
-        if (name.toString().startsWith ("base64:"))
+        if (att->name.toString().startsWith ("base64:"))
         {
             MemoryBlock mb;
 
-            if (mb.fromBase64Encoding (value))
+            if (mb.fromBase64Encoding (att->value))
             {
-                values.add ({ name.toString().substring (7), var (mb) });
+                values.add ({ att->name.toString().substring (7), var (mb) });
                 continue;
             }
         }
 
-        values.add ({ name, var (value) });
+        values.add ({ att->name, var (att->value) });
     }
 }
 

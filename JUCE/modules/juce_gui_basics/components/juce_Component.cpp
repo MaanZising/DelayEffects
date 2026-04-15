@@ -57,57 +57,14 @@ Component* Component::currentlyFocusedComponent = nullptr;
 class HierarchyChecker
 {
 public:
-    /*  Creates a bail-out checker for comp and its ancestors, that will return true from
-        shouldBailOut() if all of comp's ancestors are destroyed.
-        @param comp     a safe pointer to a component. The pointer will be updated to point
-                        to the nearest non-null ancestor on each call to shouldBailOut.
-    */
-    HierarchyChecker (Component::SafePointer<Component>* comp, const MouseEvent& originalEvent)
-        : closestAncestor (*comp),
-          me (originalEvent)
+    HierarchyChecker (Component* comp, const MouseEvent& originalEvent)
+        : me (originalEvent)
     {
-        for (Component* c = *comp; c != nullptr; c = c->getParentComponent())
-            hierarchy.emplace_back (c);
+        for (; comp != nullptr; comp = comp->getParentComponent())
+            hierarchy.emplace_back (comp);
     }
 
     Component* nearestNonNullParent() const
-    {
-        return closestAncestor;
-    }
-
-    /*  Searches for the closest ancestor, and returns true if the closest ancestor is nullptr. */
-    bool shouldBailOut() const
-    {
-        closestAncestor = findNearestNonNullParent();
-        return closestAncestor == nullptr;
-    }
-
-    MouseEvent eventWithNearestParent() const
-    {
-        return { me.source,
-                 me.position.toFloat(),
-                 me.mods,
-                 me.pressure, me.orientation, me.rotation,
-                 me.tiltX, me.tiltY,
-                 closestAncestor,
-                 closestAncestor,
-                 me.eventTime,
-                 me.mouseDownPosition.toFloat(),
-                 me.mouseDownTime,
-                 me.getNumberOfClicks(),
-                 me.mouseWasDraggedSinceMouseDown() };
-    }
-
-    template <typename Callback>
-    void forEach (Callback&& callback)
-    {
-        for (auto& item : hierarchy)
-            if (item != nullptr)
-                callback (*item);
-    }
-
-private:
-    Component* findNearestNonNullParent() const
     {
         for (auto& comp : hierarchy)
             if (comp != nullptr)
@@ -116,7 +73,28 @@ private:
         return nullptr;
     }
 
-    Component::SafePointer<Component>& closestAncestor;
+    bool shouldBailOut() const
+    {
+        return nearestNonNullParent() == nullptr;
+    }
+
+    MouseEvent eventWithNearestParent() const
+    {
+        auto* comp = nearestNonNullParent();
+        return { me.source,
+                 me.position.toFloat(),
+                 me.mods,
+                 me.pressure, me.orientation, me.rotation,
+                 me.tiltX, me.tiltY,
+                 comp, comp,
+                 me.eventTime,
+                 me.mouseDownPosition.toFloat(),
+                 me.mouseDownTime,
+                 me.getNumberOfClicks(),
+                 me.mouseWasDraggedSinceMouseDown() };
+    }
+
+private:
     std::vector<Component::SafePointer<Component>> hierarchy;
     const MouseEvent me;
 };
@@ -214,22 +192,8 @@ public:
         auto scale = g.getInternalContext().getPhysicalPixelScaleFactor();
         auto scaledBounds = c.getLocalBounds() * scale;
 
-        const auto preferredType = g.getInternalContext().getPreferredImageTypeForTemporaryImages();
-        const auto pixelData = effectImage.getPixelData();
-        const auto shouldCreateImage = pixelData == nullptr
-                                       || pixelData->width != scaledBounds.getWidth()
-                                       || pixelData->height != scaledBounds.getHeight()
-                                       || pixelData->createType()->getTypeID() != preferredType->getTypeID();
-
-        if (shouldCreateImage)
-        {
-            effectImage = Image { c.isOpaque() ? Image::RGB : Image::ARGB,
-                                  scaledBounds.getWidth(),
-                                  scaledBounds.getHeight(),
-                                  false,
-                                  *preferredType };
-            effectImage.setBackupEnabled (false);
-        }
+        if (effectImage.getBounds() != scaledBounds)
+            effectImage = Image { c.isOpaque() ? Image::RGB : Image::ARGB, scaledBounds.getWidth(), scaledBounds.getHeight(), false };
 
         if (! c.isOpaque())
             effectImage.clear (effectImage.getBounds());
@@ -245,11 +209,6 @@ public:
 
         g.addTransform (AffineTransform::scale (1.0f / scale));
         effect->applyEffect (effectImage, g, scale, ignoreAlphaLevel ? 1.0f : c.getAlpha());
-    }
-
-    void releaseResources()
-    {
-        effectImage = {};
     }
 
 private:
@@ -618,15 +577,6 @@ void Component::setBufferedToImage (bool shouldBeBuffered)
     }
 }
 
-void Component::invalidateCachedImageResources()
-{
-    if (cachedImage != nullptr)
-        cachedImage->releaseResources();
-
-    if (effectState != nullptr)
-        effectState->releaseResources();
-}
-
 //==============================================================================
 void Component::reorderChildInternal (int sourceIndex, int destIndex)
 {
@@ -956,8 +906,7 @@ void Component::setSize (int w, int h)                  { setBounds (getX(), get
 void Component::setTopLeftPosition (int x, int y)       { setTopLeftPosition ({ x, y }); }
 void Component::setTopLeftPosition (Point<int> pos)     { setBounds (pos.x, pos.y, getWidth(), getHeight()); }
 
-void Component::setTopRightPosition (int x, int y)      { setTopRightPosition ({ x, y }); }
-void Component::setTopRightPosition (Point<int> pos)    { setTopLeftPosition (pos.x - getWidth(), pos.y); }
+void Component::setTopRightPosition (int x, int y)      { setTopLeftPosition (x - getWidth(), y); }
 void Component::setBounds (Rectangle<int> r)            { setBounds (r.getX(), r.getY(), r.getWidth(), r.getHeight()); }
 
 void Component::setCentrePosition (Point<int> p)        { setBounds (getBounds().withCentre (p.transformedBy (getTransform().inverted()))); }
@@ -1839,9 +1788,7 @@ bool Component::isPaintingUnclipped() const noexcept
 
 //==============================================================================
 Image Component::createComponentSnapshot (Rectangle<int> areaToGrab,
-                                          bool clipImageToComponentBounds,
-                                          float scaleFactor,
-                                          const ImageType& imageType)
+                                          bool clipImageToComponentBounds, float scaleFactor)
 {
     auto r = areaToGrab;
 
@@ -1854,7 +1801,7 @@ Image Component::createComponentSnapshot (Rectangle<int> areaToGrab,
     auto w = roundToInt (scaleFactor * (float) r.getWidth());
     auto h = roundToInt (scaleFactor * (float) r.getHeight());
 
-    Image image (flags.opaqueFlag ? Image::RGB : Image::ARGB, w, h, true, imageType);
+    Image image (flags.opaqueFlag ? Image::RGB : Image::ARGB, w, h, true);
 
     Graphics g (image);
 
@@ -2136,36 +2083,33 @@ void Component::removeMouseListener (MouseListener* listenerToRemove)
 }
 
 //==============================================================================
-void Component::internalMouseEnter (SafePointer<Component> target, MouseInputSource source, Point<float> relativePos, Time time)
+void Component::internalMouseEnter (MouseInputSource source, Point<float> relativePos, Time time)
 {
-    if (target->isCurrentlyBlockedByAnotherModalComponent())
+    if (isCurrentlyBlockedByAnotherModalComponent())
     {
         // if something else is modal, always just show a normal mouse cursor
         source.showMouseCursor (MouseCursor::NormalCursor);
         return;
     }
 
-    if (target->flags.repaintOnMouseActivityFlag)
-        target->repaint();
+    if (flags.repaintOnMouseActivityFlag)
+        repaint();
 
     const auto me = makeMouseEvent (source,
                                     detail::PointerState().withPosition (relativePos),
                                     source.getCurrentModifiers(),
-                                    target,
-                                    target,
+                                    this,
+                                    this,
                                     time,
                                     relativePos,
                                     time,
                                     0,
                                     false);
 
-    HierarchyChecker checker (&target, me);
-    target->mouseEnter (me);
+    HierarchyChecker checker (this, me);
+    mouseEnter (me);
 
-    if (checker.shouldBailOut())
-        return;
-
-    target->flags.cachedMouseInsideComponent = true;
+    flags.cachedMouseInsideComponent = true;
 
     if (checker.shouldBailOut())
         return;
@@ -2174,33 +2118,33 @@ void Component::internalMouseEnter (SafePointer<Component> target, MouseInputSou
     MouseListenerList::sendMouseEvent (checker, &MouseListener::mouseEnter);
 }
 
-void Component::internalMouseExit (SafePointer<Component> target, MouseInputSource source, Point<float> relativePos, Time time)
+void Component::internalMouseExit (MouseInputSource source, Point<float> relativePos, Time time)
 {
-    if (target->isCurrentlyBlockedByAnotherModalComponent())
+    if (isCurrentlyBlockedByAnotherModalComponent())
     {
         // if something else is modal, always just show a normal mouse cursor
         source.showMouseCursor (MouseCursor::NormalCursor);
         return;
     }
 
-    if (target->flags.repaintOnMouseActivityFlag)
-        target->repaint();
+    if (flags.repaintOnMouseActivityFlag)
+        repaint();
 
-    target->flags.cachedMouseInsideComponent = false;
+    flags.cachedMouseInsideComponent = false;
 
     const auto me = makeMouseEvent (source,
                                     detail::PointerState().withPosition (relativePos),
                                     source.getCurrentModifiers(),
-                                    target,
-                                    target,
+                                    this,
+                                    this,
                                     time,
                                     relativePos,
                                     time,
                                     0,
                                     false);
 
-    HierarchyChecker checker (&target, me);
-    target->mouseExit (me);
+    HierarchyChecker checker (this, me);
+    mouseExit (me);
 
     if (checker.shouldBailOut())
         return;
@@ -2209,8 +2153,7 @@ void Component::internalMouseExit (SafePointer<Component> target, MouseInputSour
     MouseListenerList::sendMouseEvent (checker, &MouseListener::mouseExit);
 }
 
-void Component::internalMouseDown (SafePointer<Component> target,
-                                   MouseInputSource source,
+void Component::internalMouseDown (MouseInputSource source,
                                    const detail::PointerState& relativePointerState,
                                    Time time)
 {
@@ -2219,27 +2162,27 @@ void Component::internalMouseDown (SafePointer<Component> target,
     const auto me = makeMouseEvent (source,
                                     relativePointerState,
                                     source.getCurrentModifiers(),
-                                    target,
-                                    target,
+                                    this,
+                                    this,
                                     time,
                                     relativePointerState.position,
                                     time,
                                     source.getNumberOfMultipleClicks(),
                                     false);
 
-    HierarchyChecker checker (&target, me);
+    HierarchyChecker checker (this, me);
 
-    if (target->isCurrentlyBlockedByAnotherModalComponent())
+    if (isCurrentlyBlockedByAnotherModalComponent())
     {
-        target->flags.mouseDownWasBlocked = true;
-        target->internalModalInputAttempt();
+        flags.mouseDownWasBlocked = true;
+        internalModalInputAttempt();
 
         if (checker.shouldBailOut())
             return;
 
         // If processing the input attempt has exited the modal loop, we'll allow the event
         // to be delivered..
-        if (target->isCurrentlyBlockedByAnotherModalComponent())
+        if (isCurrentlyBlockedByAnotherModalComponent())
         {
             // allow blocked mouse-events to go to global listeners..
             desktop.getMouseListeners().callChecked (checker, [&] (MouseListener& l) { l.mouseDown (checker.eventWithNearestParent()); });
@@ -2247,26 +2190,28 @@ void Component::internalMouseDown (SafePointer<Component> target,
         }
     }
 
-    target->flags.mouseDownWasBlocked = false;
+    flags.mouseDownWasBlocked = false;
 
-    checker.forEach ([] (auto& comp)
+    for (auto* c = this; c != nullptr; c = c->parentComponent)
     {
-        if (comp.isBroughtToFrontOnMouseClick())
-            comp.toFront (true);
-    });
+        if (c->isBroughtToFrontOnMouseClick())
+        {
+            c->toFront (true);
+
+            if (checker.shouldBailOut())
+                return;
+        }
+    }
+
+    grabKeyboardFocusInternal (focusChangedByMouseClick, true, FocusChangeDirection::unknown);
 
     if (checker.shouldBailOut())
         return;
 
-    target->grabKeyboardFocusInternal (focusChangedByMouseClick, true, FocusChangeDirection::unknown);
+    if (flags.repaintOnMouseActivityFlag)
+        repaint();
 
-    if (checker.shouldBailOut())
-        return;
-
-    if (target->flags.repaintOnMouseActivityFlag)
-        target->repaint();
-
-    target->mouseDown (me);
+    mouseDown (me);
 
     if (checker.shouldBailOut())
         return;
@@ -2276,28 +2221,25 @@ void Component::internalMouseDown (SafePointer<Component> target,
     MouseListenerList::sendMouseEvent (checker, &MouseListener::mouseDown);
 }
 
-void Component::internalMouseUp (SafePointer<Component> target,
-                                 MouseInputSource source,
+void Component::internalMouseUp (MouseInputSource source,
                                  const detail::PointerState& relativePointerState,
                                  Time time,
                                  const ModifierKeys oldModifiers)
 {
-    const auto originalTarget = target;
-
     const auto me = makeMouseEvent (source,
                                     relativePointerState,
                                     oldModifiers,
-                                    target,
-                                    target,
+                                    this,
+                                    this,
                                     time,
-                                    target->getLocalPoint (nullptr, source.getLastMouseDownPosition()),
+                                    getLocalPoint (nullptr, source.getLastMouseDownPosition()),
                                     source.getLastMouseDownTime(),
                                     source.getNumberOfMultipleClicks(),
                                     source.isLongPressOrDrag());
 
-    HierarchyChecker checker (&target, me);
+    HierarchyChecker checker (this, me);
 
-    if (target->flags.mouseDownWasBlocked && target->isCurrentlyBlockedByAnotherModalComponent())
+    if (flags.mouseDownWasBlocked && isCurrentlyBlockedByAnotherModalComponent())
     {
         // Global listeners still need to know about the mouse up
         auto& desktop = Desktop::getInstance();
@@ -2305,10 +2247,10 @@ void Component::internalMouseUp (SafePointer<Component> target,
         return;
     }
 
-    if (target->flags.repaintOnMouseActivityFlag)
-        target->repaint();
+    if (flags.repaintOnMouseActivityFlag)
+        repaint();
 
-    target->mouseUp (me);
+    mouseUp (me);
 
     if (checker.shouldBailOut())
         return;
@@ -2324,8 +2266,8 @@ void Component::internalMouseUp (SafePointer<Component> target,
     // check for double-click
     if (me.getNumberOfClicks() >= 2)
     {
-        if (target == originalTarget)
-            target->mouseDoubleClick (checker.eventWithNearestParent());
+        if (checker.nearestNonNullParent() == this)
+            mouseDoubleClick (checker.eventWithNearestParent());
 
         if (checker.shouldBailOut())
             return;
@@ -2335,24 +2277,24 @@ void Component::internalMouseUp (SafePointer<Component> target,
     }
 }
 
-void Component::internalMouseDrag (SafePointer<Component> target, MouseInputSource source, const detail::PointerState& relativePointerState, Time time)
+void Component::internalMouseDrag (MouseInputSource source, const detail::PointerState& relativePointerState, Time time)
 {
-    if (! target->isCurrentlyBlockedByAnotherModalComponent())
+    if (! isCurrentlyBlockedByAnotherModalComponent())
     {
         const auto me = makeMouseEvent (source,
                                         relativePointerState,
                                         source.getCurrentModifiers(),
-                                        target,
-                                        target,
+                                        this,
+                                        this,
                                         time,
-                                        target->getLocalPoint (nullptr, source.getLastMouseDownPosition()),
+                                        getLocalPoint (nullptr, source.getLastMouseDownPosition()),
                                         source.getLastMouseDownTime(),
                                         source.getNumberOfMultipleClicks(),
                                         source.isLongPressOrDrag());
 
-        HierarchyChecker checker (&target, me);
+        HierarchyChecker checker (this, me);
 
-        target->mouseDrag (me);
+        mouseDrag (me);
 
         if (checker.shouldBailOut())
             return;
@@ -2362,11 +2304,11 @@ void Component::internalMouseDrag (SafePointer<Component> target, MouseInputSour
     }
 }
 
-void Component::internalMouseMove (SafePointer<Component> target, MouseInputSource source, Point<float> relativePos, Time time)
+void Component::internalMouseMove (MouseInputSource source, Point<float> relativePos, Time time)
 {
     auto& desktop = Desktop::getInstance();
 
-    if (target->isCurrentlyBlockedByAnotherModalComponent())
+    if (isCurrentlyBlockedByAnotherModalComponent())
     {
         // allow blocked mouse-events to go to global listeners..
         desktop.sendMouseMove();
@@ -2376,17 +2318,17 @@ void Component::internalMouseMove (SafePointer<Component> target, MouseInputSour
         const auto me = makeMouseEvent (source,
                                         detail::PointerState().withPosition (relativePos),
                                         source.getCurrentModifiers(),
-                                        target,
-                                        target,
+                                        this,
+                                        this,
                                         time,
                                         relativePos,
                                         time,
                                         0,
                                         false);
 
-        HierarchyChecker checker (&target, me);
+        HierarchyChecker checker (this, me);
 
-        target->mouseMove (me);
+        mouseMove (me);
 
         if (checker.shouldBailOut())
             return;
@@ -2396,7 +2338,7 @@ void Component::internalMouseMove (SafePointer<Component> target, MouseInputSour
     }
 }
 
-void Component::internalMouseWheel (SafePointer<Component> target, MouseInputSource source, Point<float> relativePos,
+void Component::internalMouseWheel (MouseInputSource source, Point<float> relativePos,
                                     Time time, const MouseWheelDetails& wheel)
 {
     auto& desktop = Desktop::getInstance();
@@ -2404,24 +2346,24 @@ void Component::internalMouseWheel (SafePointer<Component> target, MouseInputSou
     const auto me = makeMouseEvent (source,
                                     detail::PointerState().withPosition (relativePos),
                                     source.getCurrentModifiers(),
-                                    target,
-                                    target,
+                                    this,
+                                    this,
                                     time,
                                     relativePos,
                                     time,
                                     0,
                                     false);
 
-    HierarchyChecker checker (&target, me);
+    HierarchyChecker checker (this, me);
 
-    if (target->isCurrentlyBlockedByAnotherModalComponent())
+    if (isCurrentlyBlockedByAnotherModalComponent())
     {
         // allow blocked mouse-events to go to global listeners..
         desktop.mouseListeners.callChecked (checker, [&] (MouseListener& l) { l.mouseWheelMove (me, wheel); });
     }
     else
     {
-        target->mouseWheelMove (me, wheel);
+        mouseWheelMove (me, wheel);
 
         if (checker.shouldBailOut())
             return;
@@ -2433,7 +2375,7 @@ void Component::internalMouseWheel (SafePointer<Component> target, MouseInputSou
     }
 }
 
-void Component::internalMagnifyGesture (SafePointer<Component> target, MouseInputSource source, Point<float> relativePos,
+void Component::internalMagnifyGesture (MouseInputSource source, Point<float> relativePos,
                                         Time time, float amount)
 {
     auto& desktop = Desktop::getInstance();
@@ -2441,24 +2383,24 @@ void Component::internalMagnifyGesture (SafePointer<Component> target, MouseInpu
     const auto me = makeMouseEvent (source,
                                     detail::PointerState().withPosition (relativePos),
                                     source.getCurrentModifiers(),
-                                    target,
-                                    target,
+                                    this,
+                                    this,
                                     time,
                                     relativePos,
                                     time,
                                     0,
                                     false);
 
-    HierarchyChecker checker (&target, me);
+    HierarchyChecker checker (this, me);
 
-    if (target->isCurrentlyBlockedByAnotherModalComponent())
+    if (isCurrentlyBlockedByAnotherModalComponent())
     {
         // allow blocked mouse-events to go to global listeners..
         desktop.mouseListeners.callChecked (checker, [&] (MouseListener& l) { l.mouseMagnify (me, amount); });
     }
     else
     {
-        target->mouseMagnify (me, amount);
+        mouseMagnify (me, amount);
 
         if (checker.shouldBailOut())
             return;
@@ -2952,7 +2894,7 @@ bool Component::isMouseOverOrDragging (bool includeChildren) const
 
 bool JUCE_CALLTYPE Component::isMouseButtonDownAnywhere() noexcept
 {
-    return ModifierKeys::getCurrentModifiers().isAnyMouseButtonDown();
+    return ModifierKeys::currentModifiers.isAnyMouseButtonDown();
 }
 
 Point<int> Component::getMouseXYRelative() const

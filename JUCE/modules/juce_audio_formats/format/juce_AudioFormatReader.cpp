@@ -299,12 +299,11 @@ int64 AudioFormatReader::searchForLevel (int64 startSample,
         return -1;
 
     const int bufferSize = 4096;
-    const size_t channels = numChannels;
-    HeapBlock<int> tempSpace (bufferSize * channels + 64);
-    std::vector<int*> channelPointers (channels);
+    HeapBlock<int> tempSpace (bufferSize * 2 + 64);
 
-    for (auto [index, ptr] : enumerate (channelPointers, size_t{}))
-        ptr = tempSpace + (bufferSize * index);
+    int* tempBuffer[3] = { tempSpace.get(),
+                           tempSpace.get() + bufferSize,
+                           nullptr };
 
     int consecutive = 0;
     int64 firstMatchPos = -1;
@@ -327,7 +326,7 @@ int64 AudioFormatReader::searchForLevel (int64 startSample,
         if (bufferStart >= lengthInSamples)
             break;
 
-        read (channelPointers.data(), (int) channels, bufferStart, numThisTime, false);
+        read (tempBuffer, 2, bufferStart, numThisTime, false);
         auto num = numThisTime;
 
         while (--num >= 0)
@@ -335,25 +334,43 @@ int64 AudioFormatReader::searchForLevel (int64 startSample,
             if (numSamplesToSearch < 0)
                 --startSample;
 
+            bool matches = false;
             auto index = (int) (startSample - bufferStart);
 
-            const auto matches = std::invoke ([&]
+            if (usesFloatingPointData)
             {
-                if (usesFloatingPointData)
-                {
-                    return std::any_of (channelPointers.begin(), channelPointers.end(), [&] (const auto& ptr)
-                    {
-                        const float sample = std::abs (((float*) ptr) [index]);
-                        return magnitudeRangeMinimum <= sample && sample <= magnitudeRangeMaximum;
-                    });
-                }
+                const float sample1 = std::abs (((float*) tempBuffer[0]) [index]);
 
-                return std::any_of (channelPointers.begin(), channelPointers.end(), [&] (const auto& ptr)
+                if (sample1 >= magnitudeRangeMinimum
+                     && sample1 <= magnitudeRangeMaximum)
                 {
-                    const int sample = std::abs (ptr[index]);
-                    return intMagnitudeRangeMinimum <= sample && sample <= intMagnitudeRangeMaximum;
-                });
-            });
+                    matches = true;
+                }
+                else if (numChannels > 1)
+                {
+                    const float sample2 = std::abs (((float*) tempBuffer[1]) [index]);
+
+                    matches = (sample2 >= magnitudeRangeMinimum
+                                 && sample2 <= magnitudeRangeMaximum);
+                }
+            }
+            else
+            {
+                const int sample1 = std::abs (tempBuffer[0] [index]);
+
+                if (sample1 >= intMagnitudeRangeMinimum
+                     && sample1 <= intMagnitudeRangeMaximum)
+                {
+                    matches = true;
+                }
+                else if (numChannels > 1)
+                {
+                    const int sample2 = std::abs (tempBuffer[1][index]);
+
+                    matches = (sample2 >= intMagnitudeRangeMinimum
+                                 && sample2 <= intMagnitudeRangeMaximum);
+                }
+            }
 
             if (matches)
             {

@@ -81,12 +81,13 @@ public:
     void saveAndRelease();
 
     /** Restores the framebuffer content that was previously saved using saveAndRelease().
+        After saving to main memory, the original state can be restored by calling restoreToGPUMemory().
     */
     bool reloadSavedCopy (OpenGLContext& context);
 
     //==============================================================================
     /** Returns true if a valid buffer has been allocated. */
-    bool isValid() const noexcept;
+    bool isValid() const noexcept                       { return pimpl != nullptr; }
 
     /** Returns the width of the buffer. */
     int getWidth() const noexcept;
@@ -116,28 +117,24 @@ public:
     /** Selects the framebuffer as the current target, and clears it to transparent. */
     void makeCurrentAndClear();
 
-    enum class RowOrder
-    {
-        fromBottomUp,   //< Standard order for OpenGL, the bottom-most row of pixels is first.
-                        //< Using this pixel ordering may be faster, but may be incompatible
-                        //< with other JUCE functions that operate on image pixel data, as these
-                        //< generally expect the rows to be ordered top-down.
-        fromTopDown,    //< Standard order for JUCE images, the top-most row of pixels is first.
-    };
-
     /** Reads an area of pixels from the framebuffer into a 32-bit ARGB pixel array.
-        The RowOrder parameter specifies the order of rows in the resulting array.
+        The lineStride is measured as a number of pixels, not bytes - pass a stride
+        of 0 to indicate a packed array.
     */
-    bool readPixels (PixelARGB* targetData, const Rectangle<int>& sourceArea, RowOrder);
+    bool readPixels (PixelARGB* targetData, const Rectangle<int>& sourceArea);
 
     /** Writes an area of pixels into the framebuffer from a specified pixel array.
-        The RowOrder parameter specifies the order of rows in srcData.
+        The lineStride is measured as a number of pixels, not bytes - pass a stride
+        of 0 to indicate a packed array.
     */
-    bool writePixels (const PixelARGB* srcData, const Rectangle<int>& targetArea, RowOrder);
+    bool writePixels (const PixelARGB* srcData, const Rectangle<int>& targetArea);
 
 private:
     class Pimpl;
     std::unique_ptr<Pimpl> pimpl;
+
+    class SavedState;
+    std::unique_ptr<SavedState> savedState;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (OpenGLFrameBuffer)
 };

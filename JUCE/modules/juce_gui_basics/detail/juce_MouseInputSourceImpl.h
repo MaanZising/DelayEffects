@@ -58,7 +58,7 @@ public:
 
     ModifierKeys getCurrentModifiers() const noexcept
     {
-        return ModifierKeys::getCurrentModifiers()
+        return ModifierKeys::currentModifiers
                 .withoutMouseButtons()
                 .withFlags (buttonState.getRawFlags());
     }
@@ -117,76 +117,68 @@ public:
     void sendMouseEnter (Component& comp, const detail::PointerState& pointerState, Time time)
     {
         JUCE_MOUSE_EVENT_DBG ("enter", pointerState.position)
-        Component::internalMouseEnter (&comp,
-                                       MouseInputSource (this),
-                                       SH::screenPosToLocalPos (comp, pointerState.position),
-                                       time);
+        comp.internalMouseEnter (MouseInputSource (this),
+                                 SH::screenPosToLocalPos (comp, pointerState.position),
+                                 time);
     }
 
     void sendMouseExit (Component& comp, const detail::PointerState& pointerState, Time time)
     {
         JUCE_MOUSE_EVENT_DBG ("exit", pointerState.position)
-        Component::internalMouseExit (&comp,
-                                      MouseInputSource (this),
-                                      SH::screenPosToLocalPos (comp, pointerState.position),
-                                      time);
+        comp.internalMouseExit (MouseInputSource (this),
+                                SH::screenPosToLocalPos (comp, pointerState.position),
+                                time);
     }
 
     void sendMouseMove (Component& comp, const detail::PointerState& pointerState, Time time)
     {
         JUCE_MOUSE_EVENT_DBG ("move", pointerState.position)
-        Component::internalMouseMove (&comp,
-                                      MouseInputSource (this),
-                                      SH::screenPosToLocalPos (comp, pointerState.position),
-                                      time);
+        comp.internalMouseMove (MouseInputSource (this),
+                                SH::screenPosToLocalPos (comp, pointerState.position),
+                                time);
     }
 
     void sendMouseDown (Component& comp, const detail::PointerState& pointerState, Time time)
     {
         JUCE_MOUSE_EVENT_DBG ("down", pointerState.position)
-        Component::internalMouseDown (&comp,
-                                      MouseInputSource (this),
-                                      pointerState.withPosition (SH::screenPosToLocalPos (comp, pointerState.position)),
-                                      time);
+        comp.internalMouseDown (MouseInputSource (this),
+                                pointerState.withPosition (SH::screenPosToLocalPos (comp, pointerState.position)),
+                                time);
     }
 
     void sendMouseDrag (Component& comp, const detail::PointerState& pointerState, Time time)
     {
         JUCE_MOUSE_EVENT_DBG ("drag", pointerState.position)
-        Component::internalMouseDrag (&comp,
-                                      MouseInputSource (this),
-                                      pointerState.withPosition (SH::screenPosToLocalPos (comp, pointerState.position)),
-                                      time);
+        comp.internalMouseDrag (MouseInputSource (this),
+                                pointerState.withPosition (SH::screenPosToLocalPos (comp, pointerState.position)),
+                                time);
     }
 
     void sendMouseUp (Component& comp, const detail::PointerState& pointerState, Time time, ModifierKeys oldMods)
     {
         JUCE_MOUSE_EVENT_DBG ("up", pointerState.position)
-        Component::internalMouseUp (&comp,
-                                    MouseInputSource (this),
-                                    pointerState.withPosition (SH::screenPosToLocalPos (comp, pointerState.position)),
-                                    time,
-                                    oldMods);
+        comp.internalMouseUp (MouseInputSource (this),
+                              pointerState.withPosition (SH::screenPosToLocalPos (comp, pointerState.position)),
+                              time,
+                              oldMods);
     }
 
     void sendMouseWheel (Component& comp, Point<float> screenPos, Time time, const MouseWheelDetails& wheel)
     {
         JUCE_MOUSE_EVENT_DBG ("wheel", screenPos)
-        Component::internalMouseWheel (&comp,
-                                       MouseInputSource (this),
-                                       SH::screenPosToLocalPos (comp, screenPos),
-                                       time,
-                                       wheel);
+        comp.internalMouseWheel (MouseInputSource (this),
+                                 SH::screenPosToLocalPos (comp, screenPos),
+                                 time,
+                                 wheel);
     }
 
     void sendMagnifyGesture (Component& comp, Point<float> screenPos, Time time, float amount)
     {
         JUCE_MOUSE_EVENT_DBG ("magnify", screenPos)
-        Component::internalMagnifyGesture (&comp,
-                                           MouseInputSource (this),
-                                           SH::screenPosToLocalPos (comp, screenPos),
-                                           time,
-                                           amount);
+        comp.internalMagnifyGesture (MouseInputSource (this),
+                                     SH::screenPosToLocalPos (comp, screenPos),
+                                     time,
+                                     amount);
     }
 
     #undef JUCE_MOUSE_EVENT_DBG

@@ -352,7 +352,7 @@ private:
    #endif
 
     int shmCompletionEvent = 0;
-    unsigned char pointerMap[9]{};
+    int pointerMap[5] = {};
     String localClipboardContent;
 
     Point<int> parentScreenPosition;

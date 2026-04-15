@@ -84,9 +84,9 @@ public:
     };
 
     //==============================================================================
-    /** @cond */
+   #ifndef DOXYGEN
     JUCE_DECLARE_SINGLETON_SINGLETHREADED_MINIMAL_INLINE (ModalComponentManager)
-    /** @endcond */
+   #endif
 
     //==============================================================================
     /** Returns the number of components currently being shown modally.

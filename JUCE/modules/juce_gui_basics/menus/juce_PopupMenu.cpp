@@ -32,24 +32,6 @@
   ==============================================================================
 */
 
-// Some things to keep in mind when modifying this file:
-// - Popup menus may be free-floating or parented. Make sure to test both!
-// - Menus may open while the mouse button is down, in which case the following mouse-up may
-//   trigger a hovered menu item if the mouse has moved since the menu was displayed.
-// - Consider a long menu attached to a button. It's possible for a such a menu to open underneath
-//   the mouse cursor. In this case, the menu item underneath the mouse should *not* be initially
-//   selected or clickable. Instead, wait until the mouse cursor is moved, which we interpret as the
-//   user signalling intent to trigger a menu item.
-// - Menu items may be navigated with the cursor keys. The most recent input mechanism should
-//   generally win, so pressing a cursor key should cause the mouse state to be ignored until
-//   the mouse is next moved.
-// - It's possible for menus to overlap, especially in the case of nested submenus. Of course,
-//   clicking an overlapping menu should only trigger the topmost menu item.
-// - Long menus must update properly when the mouse is completely stationary inside the scroll area
-//   at the end of the menu. This means it's not sufficient to drive all menu updates from mouse
-//   and keyboard input callbacks. Scrolling must be driven by some other periodic update mechanism
-//   such as a timer.
-
 namespace juce
 {
 
@@ -102,11 +84,14 @@ struct HeaderItemComponent final : public PopupMenu::CustomComponent
 
     void getIdealSize (int& idealWidth, int& idealHeight) override
     {
-        getLookAndFeel().getIdealPopupMenuSectionHeaderSizeWithOptions (getName(),
-                                                                        -1,
-                                                                        idealWidth,
-                                                                        idealHeight,
-                                                                        options);
+        getLookAndFeel().getIdealPopupMenuItemSizeWithOptions (getName(),
+                                                               false,
+                                                               -1,
+                                                               idealWidth,
+                                                               idealHeight,
+                                                               options);
+        idealHeight += idealHeight / 2;
+        idealWidth += idealWidth / 4;
     }
 
     std::unique_ptr<AccessibilityHandler> createAccessibilityHandler() override
@@ -126,10 +111,7 @@ struct ItemComponent final : public Component
         : item (i), parentWindow (parent), options (o), customComp (i.customComponent)
     {
         if (item.isSectionHeader)
-        {
             customComp = *new HeaderItemComponent (item.text, options);
-            setEnabled (false);
-        }
 
         if (customComp != nullptr)
         {
@@ -250,17 +232,26 @@ private:
         }
 
     private:
-        static AccessibilityActions getAccessibilityActions (ItemAccessibilityHandler&,
+        static AccessibilityActions getAccessibilityActions (ItemAccessibilityHandler& handler,
                                                              ItemComponent& item)
         {
             auto onFocus = [&item]
             {
-                item.parentWindow.disableMouseMovesOnMenuAndAncestors();
-                item.parentWindow.ensureItemComponentIsVisible (item, std::nullopt);
+                item.parentWindow.disableTimerUntilMouseMoves();
+                item.parentWindow.ensureItemComponentIsVisible (item, -1);
                 item.parentWindow.setCurrentlyHighlightedChild (&item);
             };
 
-            auto actions = AccessibilityActions().addAction (AccessibilityActionType::focus, std::move (onFocus));
+            auto onToggle = [&handler, &item, onFocus]
+            {
+                if (handler.getCurrentState().isSelected())
+                    item.parentWindow.setCurrentlyHighlightedChild (nullptr);
+                else
+                    onFocus();
+            };
+
+            auto actions = AccessibilityActions().addAction (AccessibilityActionType::focus,  std::move (onFocus))
+                                                 .addAction (AccessibilityActionType::toggle, std::move (onToggle));
 
             if (canBeTriggered (item.item))
             {
@@ -387,12 +378,9 @@ struct MenuWindow final : public Component
             addToDesktop (ComponentPeer::windowIsTemporary
                           | ComponentPeer::windowIgnoresKeyPresses
                           | lf.getMenuWindowFlags());
-        }
 
-        // Using a global mouse listener means that we get notifications about all mouse events.
-        // Without this, drags that are started on a button that displays a menu won't reach the
-        // menu, because they *only* target the component that initiated the drag interaction.
-        Desktop::getInstance().addGlobalMouseListener (this);
+            Desktop::getInstance().addGlobalMouseListener (this);
+        }
 
         if (options.getParentComponent() == nullptr && parentWindow == nullptr && lf.shouldPopupMenuScaleWithTargetComponent (options))
             if (auto* targetComponent = options.getTargetComponent())
@@ -424,22 +412,23 @@ struct MenuWindow final : public Component
 
         if (auto visibleID = options.getItemThatMustBeVisible())
         {
-            const auto iter = std::find_if (items.begin(), items.end(), [&] (auto* item)
+            for (auto* item : items)
             {
-                return item->item.itemID == visibleID;
-            });
-
-            if (iter != items.end())
-            {
-                const auto targetPosition = std::invoke ([&]
+                if (item->item.itemID == visibleID)
                 {
-                    if (auto* pc = options.getParentComponent())
-                        return pc->getLocalPoint (nullptr, targetArea.getTopLeft());
+                    const auto targetPosition = [&]
+                    {
+                        if (auto* pc = options.getParentComponent())
+                            return pc->getLocalPoint (nullptr, targetArea.getTopLeft());
 
-                    return targetArea.getTopLeft();
-                });
+                        return targetArea.getTopLeft();
+                    }();
 
-                ensureItemComponentIsVisible (**iter, targetPosition.getY() - windowPos.getY());
+                    auto y = targetPosition.getY() - windowPos.getY();
+                    ensureItemComponentIsVisible (*item, isPositiveAndBelow (y, windowPos.getHeight()) ? y : -1);
+
+                    break;
+                }
             }
         }
 
@@ -631,7 +620,7 @@ struct MenuWindow final : public Component
                 if (parentWindow != nullptr)
                     parentWindow->setCurrentlyHighlightedChild (currentChildOfParent);
 
-                disableMouseMovesOnMenuAndAncestors();
+                disableTimerUntilMouseMoves();
             }
             else if (componentAttachedTo != nullptr)
             {
@@ -640,7 +629,7 @@ struct MenuWindow final : public Component
         }
         else if (key.isKeyCode (KeyPress::rightKey))
         {
-            disableMouseMovesOnMenuAndAncestors();
+            disableTimerUntilMouseMoves();
 
             if (showSubMenuFor (currentChild))
             {
@@ -674,7 +663,7 @@ struct MenuWindow final : public Component
 
         for (auto* ms : mouseSourceStates)
         {
-            ms->handleMouseEventWithPosition (ms->source.getScreenPosition().roundToInt());
+            ms->timerCallback();
 
             if (deletionChecker == nullptr)
                 return;
@@ -774,10 +763,8 @@ struct MenuWindow final : public Component
 
         for (auto* ms : mouseSourceStates)
         {
-            if (ms->source == source)
-                mouseState = ms;
-            else if (ms->source.getType() != source.getType())
-                ms->stopTimer();
+            if      (ms->source == source)                        mouseState = ms;
+            else if (ms->source.getType() != source.getType())    ms->stopTimer();
         }
 
         if (mouseState == nullptr)
@@ -1090,66 +1077,38 @@ struct MenuWindow final : public Component
         return correctColumnWidths (maxMenuW);
     }
 
-    void ensureItemComponentIsVisible (const ItemComponent& itemComp, std::optional<int> wantedY)
+    void ensureItemComponentIsVisible (const ItemComponent& itemComp, int wantedY)
     {
-        const auto parentArea = getParentArea (windowPos.getPosition(), options.getParentComponent()) / scaleFactor;
-
-        if (const auto posAndOffset = computePosAndOffsetToEnsureVisibility (windowPos, parentArea, itemComp.getBounds(), contentHeight, wantedY))
+        if (windowPos.getHeight() > PopupMenuSettings::scrollZone * 4)
         {
-            std::tie (windowPos, childYOffset) = std::tie (posAndOffset->windowPos, posAndOffset->childYOffset);
-            updateYPositions();
+            auto currentY = itemComp.getY();
+
+            if (wantedY > 0 || currentY < 0 || itemComp.getBottom() > windowPos.getHeight())
+            {
+                if (wantedY < 0)
+                    wantedY = jlimit (PopupMenuSettings::scrollZone,
+                                      jmax (PopupMenuSettings::scrollZone,
+                                            windowPos.getHeight() - (PopupMenuSettings::scrollZone + itemComp.getHeight())),
+                                      currentY);
+
+                auto parentArea = getParentArea (windowPos.getPosition(), options.getParentComponent()) / scaleFactor;
+                auto deltaY = wantedY - currentY;
+
+                windowPos.setSize (jmin (windowPos.getWidth(), parentArea.getWidth()),
+                                   jmin (windowPos.getHeight(), parentArea.getHeight()));
+
+                auto newY = jlimit (parentArea.getY(),
+                                    parentArea.getBottom() - windowPos.getHeight(),
+                                    windowPos.getY() + deltaY);
+
+                deltaY -= newY - windowPos.getY();
+
+                childYOffset -= deltaY;
+                windowPos.setPosition (windowPos.getX(), newY);
+
+                updateYPositions();
+            }
         }
-    }
-
-    struct PosAndOffset
-    {
-        Rectangle<int> windowPos;
-        int childYOffset = 0;
-    };
-
-    static std::optional<PosAndOffset> computePosAndOffsetToEnsureVisibility (Rectangle<int> windowPos,
-                                                                              const Rectangle<int>& parentArea,
-                                                                              const Rectangle<int>& itemCompBounds,
-                                                                              int contentHeight,
-                                                                              std::optional<int> wantedY)
-    {
-        // If there's no specific wantedY, and the item component is already visible, then we don't
-        // need to make any adjustments.
-        if (! wantedY.has_value() && 0 <= itemCompBounds.getY() && itemCompBounds.getBottom() <= windowPos.getHeight())
-            return {};
-
-        const auto spaceNeededAboveItem = jmin (PopupMenuSettings::scrollZone, itemCompBounds.getY());
-        const auto spaceNeededBelowItem = jmin (PopupMenuSettings::scrollZone, contentHeight - itemCompBounds.getBottom());
-        const auto parentSpaceTargetY = windowPos.getY() + wantedY.value_or (itemCompBounds.getY());
-
-        // In order to display the visible item over the target area, we need to make sure that
-        // there's enough space above and below to hold the scroll areas if they're showing.
-        // Ideally, we want to avoid the case where the menu opens with the scroll area over the
-        // target area.
-        const auto isSpaceToOverlay = spaceNeededAboveItem <= (parentSpaceTargetY - parentArea.getY())
-                                   && spaceNeededBelowItem <= (parentArea.getBottom() - (parentSpaceTargetY + itemCompBounds.getHeight()));
-
-        if (wantedY.has_value() && isSpaceToOverlay)
-        {
-            windowPos = windowPos.withY (parentSpaceTargetY - itemCompBounds.getY())
-                                 .withHeight (contentHeight)
-                                 .constrainedWithin (parentArea);
-
-            const auto menuSpaceTargetY = parentSpaceTargetY - windowPos.getY();
-            const auto offset = itemCompBounds.getY() - menuSpaceTargetY;
-
-            return PosAndOffset { windowPos, offset };
-        }
-
-        // If there's not enough space to overlay the menu, then just use the provided menu
-        // bounds but try to position the visible item as close to the target area as possible,
-        // while avoiding the scroll areas.
-        const auto menuSpaceTargetY = jlimit (spaceNeededAboveItem,
-                                              windowPos.getHeight() - spaceNeededBelowItem - itemCompBounds.getHeight(),
-                                              parentSpaceTargetY - windowPos.getY());
-        const auto offset = itemCompBounds.getY() - menuSpaceTargetY;
-
-        return PosAndOffset { windowPos, offset };
     }
 
     void resizeToBestWindowPos()
@@ -1287,7 +1246,7 @@ struct MenuWindow final : public Component
 
     void selectNextItem (MenuSelectionDirection direction)
     {
-        disableMouseMovesOnMenuAndAncestors();
+        disableTimerUntilMouseMoves();
 
         auto start = [&]
         {
@@ -1321,12 +1280,12 @@ struct MenuWindow final : public Component
         }
     }
 
-    void disableMouseMovesOnMenuAndAncestors()
+    void disableTimerUntilMouseMoves()
     {
         disableMouseMoves = true;
 
         if (parent != nullptr)
-            parent->disableMouseMovesOnMenuAndAncestors();
+            parent->disableTimerUntilMouseMoves();
     }
 
     bool canScroll() const noexcept                 { return childYOffset != 0 || needsToScroll; }
@@ -1366,15 +1325,8 @@ struct MenuWindow final : public Component
         return getLookAndFeel();
     }
 
-    bool mouseHasBeenOver() const
-    {
-        return mouseWasOver;
-    }
-
-    bool allowMouseUpToTriggerItem() const
-    {
-        return mouseUpCanTrigger;
-    }
+    bool mouseHasBeenOver() const { return mouseWasOver; }
+    bool allowMouseUpToTriggerItem() const { return mouseUpCanTrigger; }
 
     //==============================================================================
     MenuWindow* parent;
@@ -1398,17 +1350,17 @@ private:
     void handleMouseEvent (const MouseEvent& e)
     {
         mouseWasOver |= reallyContains (getLocalPoint (nullptr, e.getScreenPosition()), true);
-        getMouseState (e.source).handleMouseEventWithPosition (e.getScreenPosition());
+        getMouseState (e.source).handleMouseEvent (e);
     }
 
     bool mouseWasOver = false;
-    bool mouseUpCanTrigger = ! ModifierKeys::getCurrentModifiers().isAnyMouseButtonDown();
+    bool mouseUpCanTrigger = ! ModifierKeys::currentModifiers.isAnyMouseButtonDown();
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MenuWindow)
 };
 
 //==============================================================================
-class MouseSourceState final : private Timer
+class MouseSourceState final : public Timer
 {
 public:
     MouseSourceState (MenuWindow& w, MouseInputSource s)
@@ -1417,39 +1369,15 @@ public:
         startTimerHz (20);
     }
 
-    ~MouseSourceState() override
-    {
-        stopTimer();
-    }
-
-    void handleMouseEventWithPosition (const Point<int>& e)
+    void handleMouseEvent (const MouseEvent& e)
     {
         if (! window.windowIsStillValid())
             return;
 
         startTimerHz (20);
-        handleMousePosition (e);
+        handleMousePosition (e.getScreenPosition());
     }
 
-    bool isOver() const
-    {
-        return window.reallyContains (window.getLocalPoint (nullptr, source.getScreenPosition()).roundToInt(), true);
-    }
-
-    using Timer::stopTimer;
-
-    MenuWindow& window;
-    MouseInputSource source;
-
-private:
-    Point<int> lastMousePos;
-    double scrollAcceleration = 0;
-    uint32 lastScrollTime = 0, lastMoveTime = 0;
-    bool isDown = false;
-
-    // Although most mouse movements can be handled inside mouse event callbacks, scrolling of menus
-    // may happen while the mouse is not moving, so periodic timer callbacks are required in this
-    // scenario.
     void timerCallback() override
     {
        #if JUCE_WINDOWS
@@ -1459,8 +1387,23 @@ private:
             return;
        #endif
 
-        handleMouseEventWithPosition (source.getScreenPosition().roundToInt());
+        if (window.windowIsStillValid())
+            handleMousePosition (source.getScreenPosition().roundToInt());
     }
+
+    bool isOver() const
+    {
+        return window.reallyContains (window.getLocalPoint (nullptr, source.getScreenPosition()).roundToInt(), true);
+    }
+
+    MenuWindow& window;
+    MouseInputSource source;
+
+private:
+    Point<int> lastMousePos;
+    double scrollAcceleration = 0;
+    uint32 lastScrollTime, lastMouseMoveTime = 0;
+    bool isDown = false;
 
     void handleMousePosition (Point<int> globalMousePos)
     {
@@ -1490,7 +1433,7 @@ private:
                            const bool wasDown, const bool overScrollArea, const bool isOverAny)
     {
         isDown = window.mouseHasBeenOver()
-                    && (ModifierKeys::getCurrentModifiers().isAnyMouseButtonDown()
+                    && (ModifierKeys::currentModifiers.isAnyMouseButtonDown()
                          || ComponentPeer::getCurrentModifiersRealtime().isAnyMouseButtonDown());
 
         const auto reallyContained = window.reallyContains (localMousePos, true);
@@ -1519,63 +1462,58 @@ private:
         }
     }
 
-    void highlightItemUnderMouse (Point<int> globalMousePos, Point<int> localMousePos, uint32 timeNow)
+    void highlightItemUnderMouse (Point<int> globalMousePos, Point<int> localMousePos, const uint32 timeNow)
     {
-        const auto mouseTimedOut = lastMoveTime != 0 && 350 < (timeNow - lastMoveTime);
-        const auto mouseHasMoved = 2 < lastMousePos.getDistanceFrom (globalMousePos);
-        const auto isMouseOver = window.reallyContains (localMousePos, true);
-
-        if (mouseHasMoved && isMouseOver)
+        if (globalMousePos != lastMousePos || timeNow > lastMouseMoveTime + 350)
         {
-            window.disableMouseMoves = false;
-            lastMoveTime = timeNow;
+            const auto isMouseOver = window.reallyContains (localMousePos, true);
+
+            if (lastMousePos.getDistanceFrom (globalMousePos) > 2)
+            {
+                lastMouseMoveTime = timeNow;
+
+                if (window.disableMouseMoves && isMouseOver)
+                    window.disableMouseMoves = false;
+            }
+
+            if (window.disableMouseMoves || (window.activeSubMenu != nullptr && window.activeSubMenu->isOverChildren()))
+                return;
+
+            const bool isMovingTowardsMenu = isMouseOver && globalMousePos != lastMousePos
+                                                && isMovingTowardsSubmenu (globalMousePos);
+
+            lastMousePos = globalMousePos;
+
+            if (! isMovingTowardsMenu)
+            {
+                auto* c = window.getComponentAt (localMousePos);
+
+                if (c == &window)
+                    c = nullptr;
+
+                auto* itemUnderMouse = dynamic_cast<ItemComponent*> (c);
+
+                if (itemUnderMouse == nullptr && c != nullptr)
+                    itemUnderMouse = c->findParentComponentOfClass<ItemComponent>();
+
+                if (itemUnderMouse != window.currentChild
+                      && (isMouseOver || (window.activeSubMenu == nullptr) || ! window.activeSubMenu->isVisible()))
+                {
+                    if (isMouseOver && (c != nullptr) && (window.activeSubMenu != nullptr))
+                        window.activeSubMenu->hide (nullptr, true);
+
+                    if (! isMouseOver)
+                    {
+                        if (! window.mouseHasBeenOver())
+                            return;
+
+                        itemUnderMouse = nullptr;
+                    }
+
+                    window.setCurrentlyHighlightedChild (itemUnderMouse);
+                }
+            }
         }
-
-        if (! mouseHasMoved && ! mouseTimedOut)
-            return;
-
-        if (window.disableMouseMoves)
-            return;
-
-        if (window.activeSubMenu != nullptr && window.activeSubMenu->isOverChildren())
-            return;
-
-        const auto isMovingTowardsMenu = isMouseOver
-                                      && globalMousePos != lastMousePos
-                                      && isMovingTowardsSubmenu (globalMousePos);
-
-        lastMousePos = globalMousePos;
-
-        if (isMovingTowardsMenu)
-            return;
-
-        auto* componentUnderMouse = window.getComponentAt (localMousePos);
-        auto* childComponentUnderMouse = componentUnderMouse != &window ? componentUnderMouse : nullptr;
-
-        auto* itemUnderMouse = std::invoke ([&]() -> ItemComponent*
-        {
-            if (auto* candidate = dynamic_cast<ItemComponent*> (childComponentUnderMouse))
-                return candidate;
-
-            if (childComponentUnderMouse != nullptr)
-                return childComponentUnderMouse->findParentComponentOfClass<ItemComponent>();
-
-            return nullptr;
-        });
-
-        if (itemUnderMouse == window.currentChild)
-            return;
-
-        if (! isMouseOver && window.activeSubMenu != nullptr && window.activeSubMenu->isVisible())
-            return;
-
-        if (isMouseOver && childComponentUnderMouse != nullptr && window.activeSubMenu != nullptr)
-            window.activeSubMenu->hide (nullptr, true);
-
-        if (! isMouseOver && ! window.mouseHasBeenOver())
-            return;
-
-        window.setCurrentlyHighlightedChild (isMouseOver ? itemUnderMouse : nullptr);
     }
 
     bool isMovingTowardsSubmenu (Point<int> newGlobalPos) const

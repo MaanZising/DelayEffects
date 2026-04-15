@@ -342,7 +342,7 @@ public:
     }
 
     //==============================================================================
-    /** @cond */
+   #ifndef DOXYGEN
     /** Using the new methods:
 
         lsv.setValue (x, false); -> lsv.setTargetValue (x);
@@ -362,7 +362,7 @@ public:
 
         setTargetValue (newValue);
     }
-    /** @endcond */
+   #endif
 
 private:
     //==============================================================================

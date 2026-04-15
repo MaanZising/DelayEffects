@@ -32,7 +32,7 @@
   ==============================================================================
 */
 
-/** @cond */
+#ifndef DOXYGEN
 
 // Forward declarations to avoid leaking implementation details.
 namespace Steinberg::Vst
@@ -40,7 +40,7 @@ namespace Steinberg::Vst
     class IComponent;
 } // namespace Steinberg::Vst
 
-/** @endcond */
+#endif
 
 //==============================================================================
 #if TARGET_OS_IPHONE

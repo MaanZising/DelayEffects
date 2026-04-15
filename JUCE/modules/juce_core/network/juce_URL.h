@@ -684,7 +684,7 @@ public:
     static URL createWithoutParsing (const String& url);
 
     //==============================================================================
-    /** @cond */
+   #ifndef DOXYGEN
     using OpenStreamProgressCallback = bool (void* context, int bytesSent, int totalBytes);
 
     /** This method has been deprecated.
@@ -701,7 +701,7 @@ public:
                                                     int* statusCode = nullptr,
                                                     int numRedirectsToFollow = 5,
                                                     String httpRequestCmd = {}) const;
-    /** @endcond */
+   #endif
 
 private:
     //==============================================================================

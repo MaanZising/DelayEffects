@@ -44,122 +44,7 @@ namespace juce
 
     // This is an internal list of callbacks (but currently used between modules)
     Array<AppInactivityCallback*> appBecomingInactiveCallbacks;
-
-    struct BadgeUpdateTrait
-    {
-       #if JUCE_IOS_API_VERSION_CAN_BE_BUILT (16, 0)
-        API_AVAILABLE (ios (16))
-        static void newFn (UIApplication*)
-        {
-            [[UNUserNotificationCenter currentNotificationCenter] setBadgeCount: 0 withCompletionHandler: nil];
-        }
-       #endif
-
-        static void oldFn (UIApplication* app)
-        {
-            JUCE_BEGIN_IGNORE_WARNINGS_GCC_LIKE ("-Wdeprecated-declarations")
-            app.applicationIconBadgeNumber = 0;
-            JUCE_END_IGNORE_WARNINGS_GCC_LIKE
-        }
-    };
-
-    struct SceneUtils
-    {
-        // This will need to become more sophisticated to enable support for multiple scenes
-        static void sceneDidBecomeActive()
-        {
-            ifelse_17_0<BadgeUpdateTrait> ([UIApplication sharedApplication]);
-            isIOSAppActive = true;
-        }
-
-        static void sceneWillResignActive()
-        {
-            isIOSAppActive = false;
-
-            for (int i = appBecomingInactiveCallbacks.size(); --i >= 0;)
-                appBecomingInactiveCallbacks.getReference (i)->appBecomingInactive();
-        }
-
-        static void sceneDidEnterBackground()
-        {
-            if (auto* app = JUCEApplicationBase::getInstance())
-            {
-               #if JUCE_EXECUTE_APP_SUSPEND_ON_BACKGROUND_TASK
-                appSuspendTask = [application beginBackgroundTaskWithName:@"JUCE Suspend Task" expirationHandler:^{
-                    if (appSuspendTask != UIBackgroundTaskInvalid)
-                    {
-                        [application endBackgroundTask:appSuspendTask];
-                        appSuspendTask = UIBackgroundTaskInvalid;
-                    }
-                }];
-
-                MessageManager::callAsync ([app] { app->suspended(); });
-               #else
-                app->suspended();
-               #endif
-            }
-        }
-
-        static void sceneWillEnterForeground()
-        {
-            if (auto* app = JUCEApplicationBase::getInstance())
-                app->resumed();
-        }
-
-        SceneUtils() = delete;
-    };
 } // namespace juce
-
-API_AVAILABLE (ios (13.0))
-@interface JuceAppSceneDelegate : NSObject<UIWindowSceneDelegate>
-@end
-
-@implementation JuceAppSceneDelegate
-SharedResourcePointer<WindowSceneTracker> windowSceneTracker;
-- (void)           scene: (UIScene*) scene
-    willConnectToSession: (UISceneSession*) session
-                 options: (UISceneConnectionOptions*) connectionOptions
-{
-    if ([scene isKindOfClass: UIWindowScene.class])
-        windowSceneTracker->setWindowScene (static_cast<UIWindowScene*> (scene));
-    else
-        jassertfalse;
-}
-
-- (void) sceneDidDisconnect: (UIScene*) scene
-{
-    if (scene == windowSceneTracker->getWindowScene())
-        windowSceneTracker->setWindowScene (nullptr);
-}
-
-- (void) sceneDidBecomeActive: (UIScene*) scene
-{
-    SceneUtils::sceneDidBecomeActive();
-}
-
-- (void) sceneWillResignActive: (UIScene*) scene
-{
-    SceneUtils::sceneWillResignActive();
-}
-
-- (void) sceneDidEnterBackground: (UIScene*) scene
-{
-    SceneUtils::sceneDidEnterBackground();
-}
-
-- (void) sceneWillEnterForeground: (UIScene*) scene
-{
-    SceneUtils::sceneWillEnterForeground();
-}
-
-- (void)         windowScene: (UIWindowScene*) windowScene
-    didUpdateCoordinateSpace: (id<UICoordinateSpace>) previousCoordinateSpace
-        interfaceOrientation: (UIInterfaceOrientation) previousInterfaceOrientation
-             traitCollection: (UITraitCollection*) previousTraitCollection
-{
-    windowSceneTracker->setWindowScene (windowScene);
-}
-@end
 
 #if JUCE_PUSH_NOTIFICATIONS
 @interface JuceAppStartupDelegate : NSObject <UIApplicationDelegate, UNUserNotificationCenterDelegate>
@@ -171,6 +56,7 @@ SharedResourcePointer<WindowSceneTracker> windowSceneTracker;
     std::optional<ScopedJuceInitialiser_GUI> initialiser;
 }
 
+@property (strong, nonatomic) UIWindow *window;
 - (id) init;
 - (void) dealloc;
 - (void) applicationDidFinishLaunching: (UIApplication*) application;
@@ -182,11 +68,6 @@ SharedResourcePointer<WindowSceneTracker> windowSceneTracker;
 - (void) application: (UIApplication*) application handleEventsForBackgroundURLSession: (NSString*) identifier
    completionHandler: (void (^)(void)) completionHandler;
 - (void) applicationDidReceiveMemoryWarning: (UIApplication *) application;
-
-- (UISceneConfiguration*)      application: (UIApplication*) application
-    configurationForConnectingSceneSession: (UISceneSession*) connectingSceneSession
-                                   options: (UISceneConnectionOptions*) options API_AVAILABLE (ios (13.0));
-
 #if JUCE_PUSH_NOTIFICATIONS
 
 - (void)                                 application: (UIApplication*) application
@@ -260,22 +141,64 @@ SharedResourcePointer<WindowSceneTracker> windowSceneTracker;
 
 - (void) applicationDidEnterBackground: (UIApplication*) application
 {
-    SceneUtils::sceneDidEnterBackground();
+    if (auto* app = JUCEApplicationBase::getInstance())
+    {
+       #if JUCE_EXECUTE_APP_SUSPEND_ON_BACKGROUND_TASK
+        appSuspendTask = [application beginBackgroundTaskWithName:@"JUCE Suspend Task" expirationHandler:^{
+            if (appSuspendTask != UIBackgroundTaskInvalid)
+            {
+                [application endBackgroundTask:appSuspendTask];
+                appSuspendTask = UIBackgroundTaskInvalid;
+            }
+        }];
+
+        MessageManager::callAsync ([app] { app->suspended(); });
+       #else
+        ignoreUnused (application);
+        app->suspended();
+       #endif
+    }
 }
 
 - (void) applicationWillEnterForeground: (UIApplication*) application
 {
-    SceneUtils::sceneWillEnterForeground();
+    ignoreUnused (application);
+
+    if (auto* app = JUCEApplicationBase::getInstance())
+        app->resumed();
 }
+
+struct BadgeUpdateTrait
+{
+   #if JUCE_IOS_API_VERSION_CAN_BE_BUILT (16, 0)
+    API_AVAILABLE (ios (16))
+    static void newFn (UIApplication*)
+    {
+        [[UNUserNotificationCenter currentNotificationCenter] setBadgeCount: 0 withCompletionHandler: nil];
+    }
+   #endif
+
+    static void oldFn (UIApplication* app)
+    {
+        JUCE_BEGIN_IGNORE_WARNINGS_GCC_LIKE ("-Wdeprecated-declarations")
+        app.applicationIconBadgeNumber = 0;
+        JUCE_END_IGNORE_WARNINGS_GCC_LIKE
+    }
+};
 
 - (void) applicationDidBecomeActive: (UIApplication*) application
 {
-    SceneUtils::sceneDidBecomeActive();
+    ifelse_17_0<BadgeUpdateTrait> (application);
+    isIOSAppActive = true;
 }
 
 - (void) applicationWillResignActive: (UIApplication*) application
 {
-    SceneUtils::sceneWillResignActive();
+    ignoreUnused (application);
+    isIOSAppActive = false;
+
+    for (int i = appBecomingInactiveCallbacks.size(); --i >= 0;)
+        appBecomingInactiveCallbacks.getReference (i)->appBecomingInactive();
 }
 
 - (void) application: (UIApplication*) application handleEventsForBackgroundURLSession: (NSString*)identifier
@@ -292,17 +215,6 @@ SharedResourcePointer<WindowSceneTracker> windowSceneTracker;
 
     if (auto* app = JUCEApplicationBase::getInstance())
         app->memoryWarningReceived();
-}
-
-- (UISceneConfiguration*)      application: (UIApplication*) application
-    configurationForConnectingSceneSession: (UISceneSession*) connectingSceneSession
-                                   options: (UISceneConnectionOptions*) options
-{
-    auto* result = [UISceneConfiguration configurationWithName: juceStringToNS (TRANS ("Default Configuration"))
-                                                   sessionRole: connectingSceneSession.role];
-    result.delegateClass = JuceAppSceneDelegate.class;
-    result.sceneClass = UIWindowScene.class;
-    return result;
 }
 
 - (void) setPushNotificationsDelegateToUse: (NSObject*) delegate
@@ -608,18 +520,7 @@ Desktop::DisplayOrientation Desktop::getCurrentOrientation() const
 // query its frame.
 struct TemporaryWindow
 {
-    UIWindow* window = std::invoke ([&]
-    {
-        if (@available (ios 13, *))
-        {
-            SharedResourcePointer<WindowSceneTracker> windowSceneTracker;
-
-            if (auto* scene = windowSceneTracker->getWindowScene())
-                return [[UIWindow alloc] initWithWindowScene: scene];
-        }
-
-        return [[UIWindow alloc] init];
-    });
+    UIWindow* window = [[UIWindow alloc] init];
     ~TemporaryWindow() noexcept { [window release]; }
 };
 

@@ -37,6 +37,7 @@
 JUCE_BEGIN_IGNORE_WARNINGS_GCC_LIKE ("-Wc99-extensions",
                                      "-Wcast-align",
                                      "-Wconversion",
+                                     "-Wdeprecated-declarations",
                                      "-Wextra-semi",
                                      "-Wfloat-conversion",
                                      "-Wfloat-equal",
@@ -55,8 +56,7 @@ JUCE_BEGIN_IGNORE_WARNINGS_GCC_LIKE ("-Wc99-extensions",
                                      "-Wswitch-enum",
                                      "-Wunused-parameter",
                                      "-Wzero-as-null-pointer-constant")
-JUCE_BEGIN_IGNORE_WARNINGS_MSVC (4100 4200 4244 4267 4389 4702 4706 4800 6308 28182 28183 6385 6386 6387 6011 6282 6323 6330 6001 6031)
-JUCE_BEGIN_IGNORE_DEPRECATION_WARNINGS
+JUCE_BEGIN_IGNORE_WARNINGS_MSVC (4100 4200 4244 4267 4389 4702 4706 4800 4996 6308 28182 28183 6385 6386 6387 6011 6282 6323 6330 6001 6031)
 
 extern "C"
 {
@@ -113,6 +113,5 @@ extern "C"
 
 } // extern "C"
 
-JUCE_END_IGNORE_DEPRECATION_WARNINGS
 JUCE_END_IGNORE_WARNINGS_MSVC
 JUCE_END_IGNORE_WARNINGS_GCC_LIKE

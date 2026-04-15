@@ -106,9 +106,6 @@ public:
     /** Returns the set of UnitTests in a specified category. */
     static Array<UnitTest*> getTestsInCategory (const String& category);
 
-    /** Returns the set of UnitTests with a specified name. */
-    static Array<UnitTest*> getTestsWithName (const String& name);
-
     /** Returns a StringArray containing all of the categories of UnitTests that have been registered. */
     static StringArray getAllCategories();
 
@@ -371,14 +368,6 @@ public:
         the randomSeed argument, or pass 0 to have a randomly-generated seed chosen.
     */
     void runTestsInCategory (const String& category, int64 randomSeed = 0);
-
-    /** Runs all the UnitTest objects with a specified name.
-        This calls runTests() for all the objects listed in UnitTest::getTestsWithName().
-
-        If you want to run the tests with a predetermined seed, you can pass that into
-        the randomSeed argument, or pass 0 to have a randomly-generated seed chosen.
-    */
-    void runTestsWithName (const String& name, int64 randomSeed = 0);
 
     /** Sets a flag to indicate whether an assertion should be triggered if a test fails.
         This is true by default.

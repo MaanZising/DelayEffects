@@ -154,17 +154,6 @@ public:
     /** Returns the text that is displayed in the title bar at the top of the SidePanel. */
     String getTitleText() const noexcept               { return titleLabel.getText(); }
 
-    /** @see isContentRestrictedToSafeArea() */
-    void setContentRestrictedToSafeArea (bool x) noexcept { restrictToSafeArea = x; }
-
-    /** When true, will avoid displaying menu content within areas of the screen that may be
-        obscured by display cutouts or operating system decorations. When false, the menu's
-        content will entirely fill the menu bounds. True by default.
-
-        @see setContentRestrictedToSafeArea()
-    */
-    bool isContentRestrictedToSafeArea() const noexcept { return restrictToSafeArea; }
-
     //==============================================================================
     /** This abstract base class is implemented by LookAndFeel classes to provide
         SidePanel drawing functionality.
@@ -241,15 +230,12 @@ private:
     int amountMoved = 0;
 
     bool shouldShowDismissButton = true;
-    bool restrictToSafeArea = true;
 
     //==============================================================================
     void lookAndFeelChanged() override;
     void componentMovedOrResized (Component&, bool wasMoved, bool wasResized) override;
     void changeListenerCallback (ChangeBroadcaster*) override;
 
-    Rectangle<int> calculateShowingBoundsInParent (Component&) const;
-    Point<int> getCurrentOffset() const;
     Rectangle<int> calculateBoundsInParent (Component&) const;
     void calculateAndRemoveShadowBounds (Rectangle<int>& bounds);
 

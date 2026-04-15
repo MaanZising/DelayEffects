@@ -86,6 +86,26 @@ static bool arrayContainsPlugin (const OwnedArray<PluginDescription>& list,
 
 #endif
 
+template <typename Callback>
+void callOnMessageThread (Callback&& callback)
+{
+    if (MessageManager::getInstance()->existsAndIsLockedByCurrentThread())
+    {
+        callback();
+        return;
+    }
+
+    WaitableEvent completionEvent;
+
+    MessageManager::callAsync ([&callback, &completionEvent]
+                               {
+                                   callback();
+                                   completionEvent.signal();
+                               });
+
+    completionEvent.wait();
+}
+
 #if JUCE_MAC
 
 //==============================================================================
@@ -140,8 +160,8 @@ private:
         {
             auto* view = static_cast<NSView*> (getView());
             const auto newArea = peer->getAreaCoveredBy (*this);
-            [view setFrame: makeCGRect (newArea.withHeight (newArea.getHeight() + 1))];
-            [view setFrame: makeCGRect (newArea)];
+            [view setFrame: makeNSRect (newArea.withHeight (newArea.getHeight() + 1))];
+            [view setFrame: makeNSRect (newArea)];
         }
     }
 
@@ -184,9 +204,7 @@ private:
 #include "format/juce_AudioPluginFormat.cpp"
 #include "format/juce_AudioPluginFormatManager.cpp"
 #include "format_types/juce_LegacyAudioParameter.cpp"
-#include "processors/juce_AudioProcessorParameter.cpp"
 #include "processors/juce_AudioProcessor.cpp"
-#include "processors/juce_AudioProcessorListener.cpp"
 #include "processors/juce_AudioPluginInstance.cpp"
 #include "processors/juce_AudioProcessorEditor.cpp"
 #include "processors/juce_AudioProcessorGraph.cpp"
@@ -213,7 +231,6 @@ private:
 #include "utilities/juce_PluginHostType.cpp"
 #include "utilities/juce_AAXClientExtensions.cpp"
 #include "utilities/juce_VST2ClientExtensions.cpp"
-#include "utilities/juce_VST3ClientExtensions.cpp"
 #include "utilities/ARA/juce_ARA_utils.cpp"
 
 #include "format_types/juce_LV2PluginFormat.cpp"
@@ -221,10 +238,6 @@ private:
 #if JUCE_UNIT_TESTS
  #if JUCE_PLUGINHOST_VST3
   #include "format_types/juce_VST3PluginFormat_test.cpp"
- #endif
-
- #if JUCE_PLUGINHOST_AU && (JUCE_MAC || JUCE_IOS)
-  #include "format_types/juce_AudioUnitPluginFormat_test.cpp"
  #endif
 
  #if JUCE_PLUGINHOST_LV2 && (! (JUCE_ANDROID || JUCE_IOS))

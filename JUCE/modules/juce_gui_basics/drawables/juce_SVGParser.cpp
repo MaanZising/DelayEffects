@@ -1299,7 +1299,7 @@ private:
         }
         else
         {
-            auto linkedFile = originalFile.getSiblingFile (link);
+            auto linkedFile = originalFile.getParentDirectory().getChildFile (link);
 
             if (linkedFile.existsAsFile())
                 inputStream = linkedFile.createInputStream();

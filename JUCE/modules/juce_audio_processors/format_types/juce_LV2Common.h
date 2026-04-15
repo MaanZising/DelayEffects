@@ -34,7 +34,7 @@
 
 #pragma once
 
-/** @cond */
+#ifndef DOXYGEN
 
 #include "juce_lv2_config.h"
 
@@ -672,4 +672,5 @@ static inline String sanitiseStringAsTtlName (const String& input)
 }
 
 } // namespace juce::lv2_shared
-/** @endcond */
+
+#endif

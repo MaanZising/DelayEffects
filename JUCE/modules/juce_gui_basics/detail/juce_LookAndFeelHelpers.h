@@ -59,7 +59,6 @@ struct LookAndFeelHelpers
         const int maxToolTipWidth = 400;
 
         AttributedString s;
-        s.setWordWrap (AttributedString::WordWrap::byChar);
         s.setJustification (Justification::centred);
         s.append (text, FontOptions (tooltipFontSize, Font::bold).withMetricsKind (metrics), colour);
 

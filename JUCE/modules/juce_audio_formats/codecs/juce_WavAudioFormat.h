@@ -297,9 +297,19 @@ public:
     MemoryMappedAudioFormatReader* createMemoryMappedReader (const File&)      override;
     MemoryMappedAudioFormatReader* createMemoryMappedReader (FileInputStream*) override;
 
-    std::unique_ptr<AudioFormatWriter> createWriterFor (std::unique_ptr<OutputStream>& streamToWriteTo,
-                                                        const AudioFormatWriterOptions& options) override;
+    AudioFormatWriter* createWriterFor (OutputStream* streamToWriteTo,
+                                        double sampleRateToUse,
+                                        unsigned int numberOfChannels,
+                                        int bitsPerSample,
+                                        const StringPairArray& metadataValues,
+                                        int qualityOptionIndex) override;
 
+    AudioFormatWriter* createWriterFor (OutputStream* streamToWriteTo,
+                                        double sampleRateToUse,
+                                        const AudioChannelSet& channelLayout,
+                                        int bitsPerSample,
+                                        const StringPairArray& metadataValues,
+                                        int qualityOptionIndex) override;
     using AudioFormat::createWriterFor;
 
     //==============================================================================

@@ -608,9 +608,9 @@ private:
     std::atomic<Priority> priority;
    #endif
 
-    /** @cond */
+   #ifndef DOXYGEN
     friend void JUCE_API juce_threadEntryPoint (void*);
-    /** @endcond */
+   #endif
 
     bool startThreadInternal (Priority);
     bool createNativeThread (Priority);

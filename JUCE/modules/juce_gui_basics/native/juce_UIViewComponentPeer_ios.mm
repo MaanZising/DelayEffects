@@ -40,43 +40,6 @@
 namespace juce
 {
 
-struct WindowSceneTrackerListener
-{
-    virtual ~WindowSceneTrackerListener() = default;
-    virtual void windowSceneChanged() = 0;
-};
-
-struct WindowSceneTracker
-{
-public:
-    WindowSceneTracker() = default;
-
-    void setWindowScene (UIWindowScene* x) API_AVAILABLE (ios (13.0))
-    {
-        windowScene = x;
-        listeners.call ([] (auto& l) { l.windowSceneChanged(); });
-    }
-
-    UIWindowScene* getWindowScene() const API_AVAILABLE (ios (13.0))
-    {
-        return static_cast<UIWindowScene*> (windowScene);
-    }
-
-    void addListener (WindowSceneTrackerListener& l)
-    {
-        listeners.add (&l);
-    }
-
-    void removeListener (WindowSceneTrackerListener& l)
-    {
-        listeners.remove (&l);
-    }
-
-private:
-    ListenerList<WindowSceneTrackerListener> listeners;
-    id windowScene = nil;
-};
-
 //==============================================================================
 static NSArray* getContainerAccessibilityElements (AccessibilityHandler& handler)
 {
@@ -152,9 +115,9 @@ static UIInterfaceOrientation getWindowOrientation()
                 return [(UIWindowScene*) scene interfaceOrientation];
     }
 
-    JUCE_BEGIN_IGNORE_DEPRECATION_WARNINGS
+    JUCE_BEGIN_IGNORE_WARNINGS_GCC_LIKE ("-Wdeprecated-declarations")
     return [sharedApplication statusBarOrientation];
-    JUCE_END_IGNORE_DEPRECATION_WARNINGS
+    JUCE_END_IGNORE_WARNINGS_GCC_LIKE
 }
 
 struct Orientations
@@ -392,11 +355,10 @@ struct UIViewPeerControllerReceiver
 
 //==============================================================================
 class UIViewComponentPeer final : public ComponentPeer,
-                                  public UIViewPeerControllerReceiver,
-                                  private WindowSceneTrackerListener
+                                  public UIViewPeerControllerReceiver
 {
 public:
-    UIViewComponentPeer (Component&, int windowStyleFlags, id viewToAttachTo);
+    UIViewComponentPeer (Component&, int windowStyleFlags, UIView* viewToAttachTo);
     ~UIViewComponentPeer() override;
 
     //==============================================================================
@@ -498,7 +460,6 @@ public:
     bool fullScreen = false, insideDrawRect = false;
     NSUniquePtr<JuceTextView> hiddenTextInput { [[JuceTextView alloc] initWithOwner: this] };
     NSUniquePtr<JuceTextInputTokenizer> tokenizer { [[JuceTextInputTokenizer alloc] initWithPeer: this] };
-    SharedResourcePointer<WindowSceneTracker> windowSceneTracker;
 
     static int64 getMouseTime (NSTimeInterval timestamp) noexcept
     {
@@ -545,19 +506,6 @@ private:
     void appStyleChanged() override
     {
         [controller setNeedsStatusBarAppearanceUpdate];
-    }
-
-    void windowSceneChanged() override
-    {
-        if (isSharedWindow)
-            return;
-
-        if (@available (ios 13, *))
-        {
-            window.windowScene = windowSceneTracker->getWindowScene();
-        }
-
-        updateScreenBounds();
     }
 
     //==============================================================================
@@ -951,7 +899,7 @@ static void updateModifiers (const UIKeyModifierFlags flags)
                          | convert (UIKeyModifierCommand,    ModifierKeys::commandModifier)
                          | convert (UIKeyModifierNumericPad, 0); // numpad modifier currently not implemented
 
-    ModifierKeys::currentModifiers = ModifierKeys::getCurrentModifiers().withOnlyMouseButtons().withFlags (juceFlags);
+    ModifierKeys::currentModifiers = ModifierKeys::currentModifiers.withOnlyMouseButtons().withFlags (juceFlags);
 }
 
 API_AVAILABLE (ios(13.4))
@@ -1159,7 +1107,7 @@ static void postTraitChangeNotification (UITraitCollection* previousTraitCollect
 
 - (BOOL) canPerformAction: (SEL) action withSender: (id) sender
 {
-    if ([self getTextInputTarget] != nullptr)
+    if (auto* target = [self getTextInputTarget])
     {
         if (action == @selector (paste:))
             return [[UIPasteboard generalPasteboard] hasStrings];
@@ -1318,7 +1266,7 @@ static void postTraitChangeNotification (UITraitCollection* previousTraitCollect
 - (UITextRange*) markedTextRange
 {
     if (owner != nullptr && owner->stringBeingComposed.isNotEmpty())
-        if (owner->findCurrentTextInputTarget() != nullptr)
+        if (auto* target = owner->findCurrentTextInputTarget())
             return [JuceUITextRange withRange: owner->getMarkedTextRange()];
 
     return nil;
@@ -1751,9 +1699,7 @@ struct ChangeRegistrationTrait
 };
 
 //==============================================================================
-UIViewComponentPeer::UIViewComponentPeer (Component& comp,
-                                          int windowStyleFlags,
-                                          id viewToAttachTo)
+UIViewComponentPeer::UIViewComponentPeer (Component& comp, int windowStyleFlags, UIView* viewToAttachTo)
     : ComponentPeer (comp, windowStyleFlags),
       isSharedWindow (viewToAttachTo != nil),
       isAppex (SystemStats::isRunningInAppExtensionSandbox())
@@ -1782,9 +1728,8 @@ UIViewComponentPeer::UIViewComponentPeer (Component& comp,
 
     if (isSharedWindow)
     {
-        auto* uiViewToAttachTo = static_cast<UIView*> (viewToAttachTo);
-        window = [uiViewToAttachTo window];
-        [uiViewToAttachTo addSubview: view];
+        window = [viewToAttachTo window];
+        [viewToAttachTo addSubview: view];
     }
     else
     {
@@ -1792,12 +1737,6 @@ UIViewComponentPeer::UIViewComponentPeer (Component& comp,
         r.origin.y = [UIScreen mainScreen].bounds.size.height - (r.origin.y + r.size.height);
 
         window = [[JuceUIWindow alloc] initWithFrame: r];
-
-        if (@available (ios 13, *))
-        {
-            window.windowScene = windowSceneTracker->getWindowScene();
-        }
-
         [((JuceUIWindow*) window) setOwner: this];
 
         controller = [[JuceUIViewController alloc] init];
@@ -1816,14 +1755,10 @@ UIViewComponentPeer::UIViewComponentPeer (Component& comp,
 
     setTitle (component.getName());
     setVisible (component.isVisible());
-
-    windowSceneTracker->addListener (*this);
 }
 
 UIViewComponentPeer::~UIViewComponentPeer()
 {
-    windowSceneTracker->removeListener (*this);
-
     if (iOSGlobals::currentlyFocusedPeer == this)
         iOSGlobals::currentlyFocusedPeer = nullptr;
 
@@ -1929,12 +1864,6 @@ void UIViewComponentPeer::setFullScreen (bool shouldBeFullScreen)
 
         if ((! shouldBeFullScreen) && r.isEmpty())
             r = getBounds();
-
-        // If we're using the UIScene lifecycle we create our first window before we get assigned
-        // a UIWindowScene, in which case we won't be able to determine the available screen area
-        // and the available bounds may be empty. In this case, we still want to fill the screen
-        // as soon as we find out the available screen area, so set this flag unconditionally.
-        fullScreen = shouldBeFullScreen;
 
         // (can't call the component's setBounds method because that'll reset our fullscreen flag)
         if (! r.isEmpty())
@@ -2071,7 +2000,7 @@ void UIViewComponentPeer::handleTouches (UIEvent* event, MouseEventFlags mouseEv
         auto time = getMouseTime (event);
         auto touchIndex = currentTouches.getIndexOfTouch (this, touch);
 
-        auto modsToSend = ModifierKeys::getCurrentModifiers();
+        auto modsToSend = ModifierKeys::currentModifiers;
 
         auto isUp = [] (MouseEventFlags m)
         {
@@ -2083,8 +2012,8 @@ void UIViewComponentPeer::handleTouches (UIEvent* event, MouseEventFlags mouseEv
             if ([touch phase] != UITouchPhaseBegan)
                 continue;
 
-            ModifierKeys::currentModifiers = ModifierKeys::getCurrentModifiers().withoutMouseButtons().withFlags (ModifierKeys::leftButtonModifier);
-            modsToSend = ModifierKeys::getCurrentModifiers();
+            ModifierKeys::currentModifiers = ModifierKeys::currentModifiers.withoutMouseButtons().withFlags (ModifierKeys::leftButtonModifier);
+            modsToSend = ModifierKeys::currentModifiers;
 
             // this forces a mouse-enter/up event, in case for some reason we didn't get a mouse-up before.
             handleMouseEvent (MouseInputSource::InputSourceType::touch, pos, modsToSend.withoutMouseButtons(),
@@ -2108,7 +2037,7 @@ void UIViewComponentPeer::handleTouches (UIEvent* event, MouseEventFlags mouseEv
         if (mouseEventFlags == MouseEventFlags::upAndCancel)
         {
             currentTouches.clearTouch (touchIndex);
-            modsToSend = ModifierKeys::currentModifiers = ModifierKeys::getCurrentModifiers().withoutMouseButtons();
+            modsToSend = ModifierKeys::currentModifiers = ModifierKeys::currentModifiers.withoutMouseButtons();
         }
 
         // NB: some devices return 0 or 1.0 if pressure is unknown, so we'll clip our value to a believable range:
@@ -2139,7 +2068,7 @@ void UIViewComponentPeer::onHover (UIHoverGestureRecognizer* gesture)
 
     handleMouseEvent (MouseInputSource::InputSourceType::touch,
                       pos,
-                      ModifierKeys::getCurrentModifiers(),
+                      ModifierKeys::currentModifiers,
                       MouseInputSource::defaultPressure, MouseInputSource::defaultOrientation,
                       UIViewComponentPeer::getMouseTime ([[NSProcessInfo processInfo] systemUptime]),
                       {});
@@ -2371,7 +2300,7 @@ void UIViewComponentPeer::performAnyPendingRepaintsNow()
 
 ComponentPeer* Component::createNewPeer (int styleFlags, void* windowToAttachTo)
 {
-    return new UIViewComponentPeer (*this, styleFlags, (id) windowToAttachTo);
+    return new UIViewComponentPeer (*this, styleFlags, (UIView*) windowToAttachTo);
 }
 
 //==============================================================================
