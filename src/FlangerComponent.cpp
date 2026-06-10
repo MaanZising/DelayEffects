@@ -56,7 +56,7 @@ FlangerComponent::~FlangerComponent()
 void FlangerComponent::paint (juce::Graphics& g)
 {
     g.setColour (lkfFlanger.darkGrey);
-    g.setFont (juce::Font ("sans-serif", 16.0f, juce::Font::bold));
+    g.setFont (lkfFlanger.boldFont);
     g.drawFittedText ("Delay Time", fisrstColumnX, firstRowY / 2, width, firstRowY / 2, juce::Justification::centred, 1);
     g.drawFittedText ("LFO Freq", width + fisrstColumnX, firstRowY / 2, width, firstRowY / 2, juce::Justification::centred, 1);
     g.drawFittedText ("LFO Depth", width * 2 + fisrstColumnX, firstRowY / 2, width, firstRowY / 2, juce::Justification::centred, 1);

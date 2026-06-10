@@ -13,6 +13,8 @@ public:
     juce::Colour orange {juce::Colour (225, 145, 10)};
     juce::Colour blue {juce::Colour (80, 125, 185)};
 
+    juce::Font boldFont { juce::FontOptions (16.0f, juce::Font::bold) };
+
     MyLookAndFeel()
     {
         setColour (juce::Slider::thumbColourId, orange);
@@ -37,13 +39,13 @@ public:
 
     juce::Font getLabelFont(juce::Label&) override
     {
-        return juce::Font ("sans-serif", 14.0f, juce::Font::bold);
+        return juce::FontOptions (14.0f, juce::Font::bold);
     }
 
     void drawTabButton (juce::TabBarButton& button, juce::Graphics& g, bool isMouseOver, bool isMouseDown) override
     {
         juce::ignoreUnused (isMouseDown);
-        g.setFont (juce::Font ("sans-serif", 20.0f, juce::Font::bold));
+        g.setFont (juce::FontOptions (20.0f, juce::Font::bold));
 
         if (button.isFrontTab())
         {
@@ -69,6 +71,7 @@ public:
                            float sliderPos, float minSliderPos, float maxSliderPos,
                            const juce::Slider::SliderStyle style, juce::Slider& slider) override
     {
+        juce::ignoreUnused (minSliderPos, maxSliderPos, style, slider);
         // Custom thickness
         const int thickness = 16; // adjust this value
 

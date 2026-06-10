@@ -47,7 +47,7 @@ void AudioPluginAudioProcessorEditor::paint (juce::Graphics& g)
     g.fillRect (100, 0, getWidth() - 100, getHeight());
 
     g.setColour (lkfEditor.darkGrey);
-    g.setFont (juce::Font ("sans-serif", 16.0f, juce::Font::bold));
+    g.setFont (lkfEditor.boldFont);
 
     g.drawFittedText ("Mix", 490, 15, 50, 30, juce::Justification::centred, 1);
     g.drawFittedText ("Gain", 565, 15, 50, 30, juce::Justification::centred, 1);

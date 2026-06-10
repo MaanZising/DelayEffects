@@ -261,7 +261,7 @@ void AudioPluginAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer,
             case 1:
                 fillDelayBuffer (channel, buffer);
                 flanger.readFromDelayBuffer (channel, buffer);
-                if (parameters.getRawParameterValue(FLANGER_FEEDBACK_TOGGLE_ID)->load())
+                if (parameters.getRawParameterValue(FLANGER_FEEDBACK_TOGGLE_ID)->load() > 0.5f) // getRawParameterValue returns a float
                     fillDelayBuffer (channel, buffer);
                 break;
         }
@@ -272,7 +272,7 @@ void AudioPluginAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer,
             auto mix = parameters.getRawParameterValue(MIX_ID)->load();
             channelData[sample] =
             (channelData[sample] * std::sin(mix * juce::MathConstants<double>::pi / 2.0)) +
-            (input[sample] * std::cos(mix * juce::MathConstants<double>::pi / 2.0));
+            (input[static_cast<long unsigned int>(sample)] * std::cos(mix * juce::MathConstants<double>::pi / 2.0));
 
             // gain
             channelData[sample] = channelData[sample] * parameters.getRawParameterValue(GAIN_ID)->load();

@@ -29,7 +29,7 @@ DelayComponent::~DelayComponent()
 void DelayComponent::paint (juce::Graphics& g)
 {
     g.setColour (lkfDelay.darkGrey);
-    g.setFont (juce::Font ("sans-serif", 16.0f, juce::Font::bold));
+    g.setFont (lkfDelay.boldFont);
     g.drawFittedText ("Delay Time", fisrstColumnX, firstRowY / 2, width, firstRowY / 2, juce::Justification::centred, 1);
     g.drawFittedText ("Feedback", fisrstColumnX + width, firstRowY / 2, width, firstRowY / 2, juce::Justification::centred, 1);
 }
