@@ -26,13 +26,19 @@ public:
     void init (double& sampleRateRef, int& writePositionRef, juce::AudioProcessorValueTreeState& parametersRef, juce::AudioBuffer<float>& delayBufferRef);
     void readFromDelayBuffer (int channel, juce::AudioBuffer<float>& buffer);
     void updateAngleDelta();
-    float getSineWaveData (int channel);
+    float getSineWaveData (int channel, int sample);
     std::vector<double> currentAngle;
     //std::vector<juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear>> smoothedFlangerDelayTime;
     //juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> smoothedDelayTime[2];
     juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> smoothedDelayTime;
     juce::AudioBuffer<float> smoothedDelayTimeBuffer;
-    
+
+    juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> smoothedLfoOffset;
+    juce::AudioBuffer<float> smoothedLfoOffsetBuffer;
+
+    juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> smoothedLfoDepth;
+    juce::AudioBuffer<float> smoothedLfoDepthBuffer;
+
 private:
     double sampleRate;
     double angleDelta { 0.0 };

@@ -192,6 +192,10 @@ void AudioPluginAudioProcessor::prepareToPlay (double sampleRate, int samplesPer
     }
     flanger.smoothedDelayTime.reset (sampleRate, samplesPerBlock*2/sampleRate);
     flanger.smoothedDelayTimeBuffer.setSize (1, samplesPerBlock);
+    flanger.smoothedLfoOffset.reset (sampleRate, samplesPerBlock*2/sampleRate);
+    flanger.smoothedLfoOffsetBuffer.setSize (1, samplesPerBlock);
+    flanger.smoothedLfoDepth.reset (sampleRate, samplesPerBlock*2/sampleRate);
+    flanger.smoothedLfoDepthBuffer.setSize (1, samplesPerBlock);
 
     juce::ignoreUnused (samplesPerBlock);
 }

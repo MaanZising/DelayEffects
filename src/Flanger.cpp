@@ -16,24 +16,37 @@ void Flanger::readFromDelayBuffer (int channel, juce::AudioBuffer<float>& buffer
     auto* delayBufferData = delayBuffer->getReadPointer (channel);
     auto delayTime = parameters->getRawParameterValue (FLANGER_DELAY_TIME_ID)->load();
     //smoothedDelayTime[channel].setTargetValue (delayTime);
+    auto lfoOffset = parameters->getRawParameterValue (FLANGER_LFO_OFFSET_ID)->load() * juce::MathConstants<double>::pi * 0.5;
+    auto lfoDepth = parameters->getRawParameterValue (FLANGER_LFO_DEPTH_ID)->load();
 
-    // set target delay time
     if (channel == 0)
+    {
+        // set target delay time
         smoothedDelayTime.setTargetValue (delayTime);
+
+        // set target lfo offset
+        smoothedLfoOffset.setTargetValue (lfoOffset);
+
+        // set target lfo depth
+        smoothedLfoDepth.setTargetValue (lfoOffset);
+    }
 
     for (int sample = 0; sample < bufferSize; ++sample)
     {
-        // write smoothed values into a buffer
+        // write smoothed values into buffers
         if (channel == 0)
+        {
             smoothedDelayTimeBuffer.setSample (0, sample, smoothedDelayTime.getNextValue());
+            smoothedLfoOffsetBuffer.setSample (0, sample, smoothedLfoOffset.getNextValue());
+            smoothedLfoDepthBuffer.setSample (0, sample, smoothedLfoDepth.getNextValue());
+        }
         
         // length of audio from in the past
         double delayPosition { *writePosition - (sampleRate * smoothedDelayTimeBuffer.getSample (0, sample)) };
 
-        auto lfoDepth = parameters->getRawParameterValue (FLANGER_LFO_DEPTH_ID)->load();
         auto feedback = parameters->getRawParameterValue (FLANGER_FEEDBACK_ID)->load();
 
-        auto currentPosition = delayPosition + (getSineWaveData (channel) * sampleRate * smoothedDelayTimeBuffer.getSample (0, sample) * lfoDepth);
+        auto currentPosition = delayPosition + (getSineWaveData (channel, sample) * sampleRate * smoothedDelayTimeBuffer.getSample (0, sample) * smoothedLfoDepthBuffer.getSample (0, sample));
         if (currentPosition < 0)
             currentPosition += static_cast<double>(delayBufferSize);
         int readPosition { static_cast<int>(currentPosition) };
@@ -60,15 +73,14 @@ void Flanger::updateAngleDelta()
     angleDelta = cyclesPerSample * 2.0 * juce::MathConstants<double>::pi;
 }
 
-float Flanger::getSineWaveData (int channel)
+float Flanger::getSineWaveData (int channel, int sample)
 {
-    auto lfoOffset = parameters->getRawParameterValue (FLANGER_LFO_OFFSET_ID)->load() * juce::MathConstants<double>::pi;
     float currentSample;
 
     if (channel % 2 == 1)
-        currentSample = static_cast<float> (std::sin(currentAngle[static_cast<long unsigned int>(channel)] + (lfoOffset)));
+        currentSample = static_cast<float> (std::sin(currentAngle[static_cast<long unsigned int>(channel)] + smoothedLfoOffsetBuffer.getSample (0, sample)));
     else
-        currentSample = static_cast<float> (std::sin(currentAngle[static_cast<long unsigned int>(channel)]));
+        currentSample = static_cast<float> (std::sin(currentAngle[static_cast<long unsigned int>(channel)] - smoothedLfoOffsetBuffer.getSample (0, sample)));
     
     currentAngle[static_cast<long unsigned int>(channel)] += angleDelta;
 
