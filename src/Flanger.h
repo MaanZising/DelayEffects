@@ -32,6 +32,7 @@ public:
     //juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> smoothedDelayTime[2];
     juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> smoothedDelayTime;
     juce::AudioBuffer<float> smoothedDelayTimeBuffer;
+    
 private:
     double sampleRate;
     double angleDelta { 0.0 };

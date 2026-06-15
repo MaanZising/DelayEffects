@@ -176,11 +176,14 @@ void AudioPluginAudioProcessor::prepareToPlay (double sampleRate, int samplesPer
     for (auto channel = 0; channel < getTotalNumOutputChannels(); ++channel)
         delayBuffer.clear (channel, 0, delayBuffer.getNumSamples());
     
-    // initialize effects
+    // initialize delay
     delay.init (sampleRate, writePosition, parameters, delayBuffer);
-    flanger.init (sampleRate, writePosition, parameters, delayBuffer);
+    delay.smoothedDelayTime.reset (sampleRate, samplesPerBlock*2/sampleRate);
+    delay.smoothedDelayTimeBuffer.setSize (1, samplesPerBlock);
+    
     
     // initialize flanger
+    flanger.init (sampleRate, writePosition, parameters, delayBuffer);
     flanger.updateAngleDelta();
     for (auto channel = 0; channel < getTotalNumOutputChannels(); ++channel)
     {

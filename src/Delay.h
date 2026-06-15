@@ -14,6 +14,10 @@ public:
     void init (double& sampleRateRef, int& writePositionRef, juce::AudioProcessorValueTreeState& parametersRef, juce::AudioBuffer<float>& delayBufferRef);
     void readFromDelayBufferByBlock (int channel, juce::AudioBuffer<float>& buffer); // not used
     void readFromDelayBuffer (int channel, juce::AudioBuffer<float>& buffer);
+
+    juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> smoothedDelayTime;
+    juce::AudioBuffer<float> smoothedDelayTimeBuffer;
+
 private:
     double sampleRate;
     int* writePosition;
